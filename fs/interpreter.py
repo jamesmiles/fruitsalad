@@ -170,6 +170,9 @@ class Interpreter:
             "char_code": "__builtin_char_code__",
             "from_char_code": "__builtin_from_char_code__",
             "sqrt": "__builtin_sqrt__",
+            "read_file": "__builtin_read_file__",
+            "read_stdin": "__builtin_read_stdin__",
+            "args": "__builtin_args__",
         }
         for name, impl in builtins.items():
             self.globals.define(name, impl, immutable=True)
@@ -1164,6 +1167,30 @@ class Interpreter:
                 raise SplatError("sqrt() takes exactly 1 argument", line, col)
             import math
             return math.sqrt(float(args[0]))
+        if name == "__builtin_read_file__":
+            if len(args) != 1 or not isinstance(args[0], str):
+                raise SplatError("read_file() takes exactly 1 Banana argument (file path)", line, col)
+            try:
+                with open(args[0], 'r', encoding='utf-8') as f:
+                    return f.read()
+            except FileNotFoundError:
+                raise SplatError(f"File not found: '{args[0]}'", line, col)
+            except IOError as e:
+                raise SplatError(f"Cannot read file '{args[0]}': {e}", line, col)
+        if name == "__builtin_read_stdin__":
+            import sys as _sys
+            return _sys.stdin.read()
+        if name == "__builtin_args__":
+            import sys as _sys
+            # Return args after the .fs filename
+            fs_args = []
+            found_fs = False
+            for a in _sys.argv[1:]:
+                if found_fs:
+                    fs_args.append(a)
+                elif a.endswith('.fs'):
+                    found_fs = True
+            return fs_args
         raise SplatError(f"Unknown built-in: {name}", line, col)
 
     # --- Helper methods ---

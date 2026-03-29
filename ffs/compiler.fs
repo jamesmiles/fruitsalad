@@ -916,7 +916,17 @@ blend generate(node, level) {
 }
 
 blend gen_program(node, level) {
-    fresh result = ""
+    -- Emit runtime helpers for FS-compatible output and integer division
+    fresh result = "def _fs_div(a, b):\n"
+    result = result + "    if isinstance(a, int) and isinstance(b, int): return a // b\n"
+    result = result + "    return a / b\n"
+    result = result + "def _fs_fmt(v):\n"
+    result = result + "    if isinstance(v, bool): return 'true' if v else 'false'\n"
+    result = result + "    if isinstance(v, list): return '[' + ', '.join(_fs_fmt(x) for x in v) + ']'\n"
+    result = result + "    if v is None: return 'pit'\n"
+    result = result + "    return str(v)\n"
+    result = result + "def _fs_display(*args): print(' '.join(_fs_fmt(a) for a in args))\n\n"
+
     preserve funcs = node[1]
     preserve stmts = node[2]
 
@@ -960,12 +970,11 @@ blend gen_blend_def(node, level) {
         yield result
     }
     -- Generate all statements, adding 'return' before the last one
-    -- if it's a bare expression (not a control flow or assignment)
     each i in 0..stmts.len() {
         preserve stmt = stmts[i]
         preserve is_last = (i == stmts.len() - 1)
-        if is_last && is_expression_node(stmt) {
-            result = result + make_indent(level + 1) + "return " + gen_expr(stmt) + "\n"
+        if is_last {
+            result = result + gen_with_return(stmt, level + 1) + "\n"
         } else {
             result = result + generate(stmt, level + 1) + "\n"
         }
@@ -975,7 +984,6 @@ blend gen_blend_def(node, level) {
 
 blend is_expression_node(node) {
     preserve typ = node[0]
-    -- These are expression types (not statements/control flow)
     if typ == "BinOp" || typ == "UnaryOp" || typ == "Call" || typ == "MethodCall" ||
        typ == "Ident" || typ == "NumLit" || typ == "FloatLit" || typ == "StrLit" ||
        typ == "BoolLit" || typ == "BasketLit" || typ == "Index" || typ == "Field" ||
@@ -983,6 +991,44 @@ blend is_expression_node(node) {
         yield true
     }
     false
+}
+
+blend gen_with_return(node, level) {
+    -- Generate a statement that should be the return value of a function
+    -- If it's a bare expression, add 'return'. If it's an if/else, recurse into branches.
+    preserve typ = node[0]
+    if is_expression_node(node) {
+        yield make_indent(level) + "return " + gen_expr(node)
+    }
+    if typ == "If" {
+        -- Generate if with returns in each branch
+        fresh code = make_indent(level) + "if " + gen_expr(node[1]) + ":\n"
+        preserve then_stmts = node[2][1]
+        if then_stmts.len() > 0 {
+            each i in 0..(then_stmts.len() - 1) {
+                code = code + generate(then_stmts[i], level + 1) + "\n"
+            }
+            code = code + gen_with_return(then_stmts[then_stmts.len() - 1], level + 1) + "\n"
+        } else {
+            code = code + make_indent(level + 1) + "pass\n"
+        }
+        preserve else_stmts = node[3][1]
+        if else_stmts.len() > 0 {
+            -- Check for else-if chain
+            if else_stmts.len() == 1 && else_stmts[0][0] == "If" {
+                code = code + make_indent(level) + "el" + gen_with_return(else_stmts[0], level).trim() + "\n"
+            } else {
+                code = code + make_indent(level) + "else:\n"
+                each i in 0..(else_stmts.len() - 1) {
+                    code = code + generate(else_stmts[i], level + 1) + "\n"
+                }
+                code = code + gen_with_return(else_stmts[else_stmts.len() - 1], level + 1) + "\n"
+            }
+        }
+        yield code
+    }
+    -- For everything else (assignments, loops, etc.) just generate normally
+    generate(node, level)
 }
 
 blend gen_block_stmts(node, level) {
@@ -1136,7 +1182,7 @@ blend gen_display(node, level) {
         }
         arg_strs = arg_strs + gen_expr(args[i])
     }
-    make_indent(level) + "print(" + arg_strs + ")"
+    make_indent(level) + "_fs_display(" + arg_strs + ")"
 }
 
 -- ============================================================
@@ -1206,6 +1252,9 @@ blend gen_binop(node) {
     preserve op = node[1]
     preserve left = gen_expr(node[2])
     preserve right = gen_expr(node[3])
+    if op == "/" {
+        yield "_fs_div(" + left + ", " + right + ")"
+    }
     fresh py_op = op
     if op == "&&" {
         py_op = "and"
@@ -1240,7 +1289,7 @@ blend gen_call(node) {
             }
             arg_strs = arg_strs + gen_expr(args[i])
         }
-        yield "print(" + arg_strs + ")"
+        yield "_fs_display(" + arg_strs + ")"
     }
     if func_name == "to_banana" {
         yield "str(" + gen_expr(args[0]) + ")"
@@ -1288,6 +1337,14 @@ blend gen_method_call(node) {
     }
     if method == "pop" {
         yield obj + ".pop()"
+    }
+    if method == "swap" {
+        preserve i_expr = gen_expr(args[0])
+        preserve j_expr = gen_expr(args[1])
+        yield obj + "[" + i_expr + "], " + obj + "[" + j_expr + "] = " + obj + "[" + j_expr + "], " + obj + "[" + i_expr + "]"
+    }
+    if method == "copy" {
+        yield obj + "[:]"
     }
     if method == "split" {
         yield obj + ".split(" + gen_expr(args[0]) + ")"
@@ -1423,26 +1480,28 @@ blend compile(source) {
 }
 
 blend main() {
-    preserve lb = from_char_code(123)  -- {
-    preserve rb = from_char_code(125)  -- }
-    preserve nl = from_char_code(10)   -- newline
-    preserve qt = from_char_code(34)   -- "
+    preserve cli_args = args()
 
-    -- Build a factorial program in Fruit Salad:
-    -- blend factorial(n) {
-    --     if n <= 1 { yield 1 }
-    --     n * factorial(n - 1)
-    -- }
-    -- blend main() { display(factorial(10)) }
-    fresh source = "blend factorial(n) " + lb + nl
-    source = source + "    if n <= 1 " + lb + nl
-    source = source + "        yield 1" + nl
-    source = source + "    " + rb + nl
-    source = source + "    n * factorial(n - 1)" + nl
-    source = source + rb + nl + nl
-    source = source + "blend main() " + lb + nl
-    source = source + "    display(factorial(10))" + nl
-    source = source + rb
+    fresh source = ""
+    if cli_args.len() > 0 {
+        -- Read source from file
+        source = read_file(cli_args[0])
+    } else {
+        -- Default demo: compile factorial
+        preserve lb = from_char_code(123)
+        preserve rb = from_char_code(125)
+        preserve nl = from_char_code(10)
+        preserve qt = from_char_code(34)
+        source = "blend factorial(n) " + lb + nl
+        source = source + "    if n <= 1 " + lb + nl
+        source = source + "        yield 1" + nl
+        source = source + "    " + rb + nl
+        source = source + "    n * factorial(n - 1)" + nl
+        source = source + rb + nl + nl
+        source = source + "blend main() " + lb + nl
+        source = source + "    display(factorial(10))" + nl
+        source = source + rb
+    }
 
     preserve python_code = compile(source)
     display(trim_output(python_code))
