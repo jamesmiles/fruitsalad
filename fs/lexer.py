@@ -36,6 +36,13 @@ KEYWORDS = {
     "recipe": TokenType.RECIPE,
     "prep": TokenType.PREP,
     "as": TokenType.AS,
+    "peel": TokenType.PEEL,
+    "to_apple": TokenType.TO_APPLE,
+    "to_date": TokenType.TO_DATE,
+    "to_banana": TokenType.TO_BANANA,
+    "abs": TokenType.ABS,
+    "min": TokenType.MIN,
+    "max": TokenType.MAX,
 }
 
 

@@ -12,6 +12,7 @@ from .ast_nodes import (
     SqueezeLiteral, PantryLiteral,
     SmoothieExpr, JuiceOrRotExpr, TossStmt, RecipeDef, PrepDef,
     PitLiteral, RipeExpr, RotExpr,
+    PeelExpr, ToAppleExpr, ToDateExpr, ToBananaExpr, AbsExpr, MinExpr, MaxExpr,
 )
 from .errors import ParseError
 
@@ -172,6 +173,20 @@ class Parser:
             return self.parse_display()
         if tt == TokenType.TOSS:
             return self.parse_toss()
+        if tt == TokenType.PEEL:
+            return self.parse_peel()
+        if tt == TokenType.TO_APPLE:
+            return self.parse_to_apple()
+        if tt == TokenType.TO_DATE:
+            return self.parse_to_date()
+        if tt == TokenType.TO_BANANA:
+            return self.parse_to_banana()
+        if tt == TokenType.ABS:
+            return self.parse_abs()
+        if tt == TokenType.MIN:
+            return self.parse_min()
+        if tt == TokenType.MAX:
+            return self.parse_max()
         if tt == TokenType.RECIPE:
             return self.parse_recipe_def()
         if tt == TokenType.PREP:
@@ -459,6 +474,61 @@ class Parser:
         value = self.parse_expression()
         return TossStmt(line=tok.line, column=tok.column, value=value)
 
+    # --- Phase 4: peel, conversion builtins ---
+
+    def parse_peel(self) -> PeelExpr:
+        tok = self.advance()
+        self.expect(TokenType.LPAREN, "Expected '(' after 'peel'")
+        value = self.parse_expression()
+        self.expect(TokenType.RPAREN, "Expected ')' after peel argument")
+        return PeelExpr(line=tok.line, column=tok.column, value=value)
+
+    def parse_to_apple(self) -> ToAppleExpr:
+        tok = self.advance()
+        self.expect(TokenType.LPAREN, "Expected '(' after 'to_apple'")
+        value = self.parse_expression()
+        self.expect(TokenType.RPAREN, "Expected ')' after to_apple argument")
+        return ToAppleExpr(line=tok.line, column=tok.column, value=value)
+
+    def parse_to_date(self) -> ToDateExpr:
+        tok = self.advance()
+        self.expect(TokenType.LPAREN, "Expected '(' after 'to_date'")
+        value = self.parse_expression()
+        self.expect(TokenType.RPAREN, "Expected ')' after to_date argument")
+        return ToDateExpr(line=tok.line, column=tok.column, value=value)
+
+    def parse_to_banana(self) -> ToBananaExpr:
+        tok = self.advance()
+        self.expect(TokenType.LPAREN, "Expected '(' after 'to_banana'")
+        value = self.parse_expression()
+        self.expect(TokenType.RPAREN, "Expected ')' after to_banana argument")
+        return ToBananaExpr(line=tok.line, column=tok.column, value=value)
+
+    def parse_abs(self) -> AbsExpr:
+        tok = self.advance()
+        self.expect(TokenType.LPAREN, "Expected '(' after 'abs'")
+        value = self.parse_expression()
+        self.expect(TokenType.RPAREN, "Expected ')' after abs argument")
+        return AbsExpr(line=tok.line, column=tok.column, value=value)
+
+    def parse_min(self) -> MinExpr:
+        tok = self.advance()
+        self.expect(TokenType.LPAREN, "Expected '(' after 'min'")
+        left = self.parse_expression()
+        self.expect(TokenType.COMMA, "Expected ',' between min arguments")
+        right = self.parse_expression()
+        self.expect(TokenType.RPAREN, "Expected ')' after min arguments")
+        return MinExpr(line=tok.line, column=tok.column, left=left, right=right)
+
+    def parse_max(self) -> MaxExpr:
+        tok = self.advance()
+        self.expect(TokenType.LPAREN, "Expected '(' after 'max'")
+        left = self.parse_expression()
+        self.expect(TokenType.COMMA, "Expected ',' between max arguments")
+        right = self.parse_expression()
+        self.expect(TokenType.RPAREN, "Expected ')' after max arguments")
+        return MaxExpr(line=tok.line, column=tok.column, left=left, right=right)
+
     def parse_recipe_def(self) -> RecipeDef:
         tok = self.expect(TokenType.RECIPE)
         name = self.expect(TokenType.IDENTIFIER, "Expected recipe name after 'recipe'").value
@@ -638,8 +708,18 @@ class Parser:
                 self.expect(TokenType.RBRACKET, "Expected ']' after index")
                 expr = IndexExpr(line=expr.line, column=expr.column, object=expr, index=index)
             elif self.match(TokenType.DOT):
-                # Field/method access
-                field_name = self.expect(TokenType.IDENTIFIER, "Expected field name after '.'").value
+                # Field/method access - allow some keywords as field names
+                tok = self.current()
+                if tok.type == TokenType.IDENTIFIER:
+                    field_name = self.advance().value
+                elif tok.type == TokenType.EACH:
+                    field_name = self.advance().value
+                elif tok.type == TokenType.SORT:
+                    field_name = self.advance().value
+                elif tok.type == TokenType.DISPLAY:
+                    field_name = self.advance().value
+                else:
+                    field_name = self.expect(TokenType.IDENTIFIER, "Expected field name after '.'").value
                 expr = FieldExpr(line=expr.line, column=expr.column, object=expr, field=field_name)
             elif self.match(TokenType.QUESTION):
                 # Juice-or-rot postfix operator
@@ -717,6 +797,22 @@ class Parser:
             value = self.parse_expression()
             self.expect(TokenType.RPAREN, "Expected ')' after rot value")
             return RotExpr(line=tok.line, column=tok.column, value=value)
+
+        # Phase 4: peel, conversions, math builtins as expressions
+        if self.peek() == TokenType.PEEL:
+            return self.parse_peel()
+        if self.peek() == TokenType.TO_APPLE:
+            return self.parse_to_apple()
+        if self.peek() == TokenType.TO_DATE:
+            return self.parse_to_date()
+        if self.peek() == TokenType.TO_BANANA:
+            return self.parse_to_banana()
+        if self.peek() == TokenType.ABS:
+            return self.parse_abs()
+        if self.peek() == TokenType.MIN:
+            return self.parse_min()
+        if self.peek() == TokenType.MAX:
+            return self.parse_max()
 
         raise self.error(f"Unexpected token {tok.type.name} ({tok.value!r})")
 

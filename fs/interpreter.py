@@ -11,6 +11,8 @@ from .ast_nodes import (
     SqueezeLiteral, PantryLiteral,
     SmoothieExpr, JuiceOrRotExpr, TossStmt, RecipeDef, PrepDef,
     PitLiteral, RipeExpr, RotExpr,
+    PeelExpr, ToAppleExpr, ToDateExpr, ToBananaExpr,
+    AbsExpr, MinExpr, MaxExpr,
 )
 from .errors import SplatError, RotError
 
@@ -142,14 +144,36 @@ class FSClosure:
 
 # --- Interpreter ---
 
+import sys
+sys.setrecursionlimit(5000)
+
 class Interpreter:
+    MAX_CALL_DEPTH = 500
+
     def __init__(self, output_fn=None):
         self.globals = Environment()
         self.output_fn = output_fn or print  # for capturing output in tests
         self.recipes = {}  # recipe_name -> RecipeDef
         self.preps = {}    # (type_name, recipe_name) -> {method_name: FSFunction}
+        self.call_depth = 0
 
     def run(self, program: Program):
+        # Register built-in functions
+        builtins = {
+            "peel": "__builtin_peel__",
+            "abs": "__builtin_abs__",
+            "min": "__builtin_min__",
+            "max": "__builtin_max__",
+            "to_apple": "__builtin_to_apple__",
+            "to_date": "__builtin_to_date__",
+            "to_banana": "__builtin_to_banana__",
+            "char_code": "__builtin_char_code__",
+            "from_char_code": "__builtin_from_char_code__",
+            "sqrt": "__builtin_sqrt__",
+        }
+        for name, impl in builtins.items():
+            self.globals.define(name, impl, immutable=True)
+
         # First pass: register all functions
         for fn in program.functions:
             self.globals.define(fn.name, FSFunction(fn, self.globals), immutable=True)
@@ -403,6 +427,11 @@ class Interpreter:
         if isinstance(obj, FSBowlInstance):
             if field in obj.field_values:
                 return obj.field_values[field]
+            # Check for recipe methods before erroring
+            type_name = obj.bowl_type.name
+            for (tn, rn), methods in self.preps.items():
+                if tn == type_name and field in methods:
+                    return ("__prep_method__", obj, methods[field])
             raise SplatError(f"No field '{field}' on bowl '{obj.bowl_type.name}'", node.line, node.column)
 
         # Medley type: return variant constructor or unit variant
@@ -432,6 +461,21 @@ class Interpreter:
         if isinstance(obj, (list, str)):
             if field == "len":
                 return ("__method_len__", obj)
+            # String-specific methods
+            if isinstance(obj, str):
+                string_methods = {
+                    "split": "__method_str_split__",
+                    "trim": "__method_str_trim__",
+                    "starts_with": "__method_str_starts_with__",
+                    "ends_with": "__method_str_ends_with__",
+                    "to_upper": "__method_str_to_upper__",
+                    "to_lower": "__method_str_to_lower__",
+                    "replace": "__method_str_replace__",
+                    "chars": "__method_str_chars__",
+                    "contains": "__method_str_contains__",
+                }
+                if field in string_methods:
+                    return (string_methods[field], obj)
             if isinstance(obj, list):
                 if field == "push":
                     return ("__method_push__", obj)
@@ -658,8 +702,20 @@ class Interpreter:
             }
             if isinstance(obj, list) and method_name in method_map:
                 return (method_map[method_name], obj)
-            if isinstance(obj, str) and method_name == "len":
-                return ("__method_len__", obj)
+            string_methods = {
+                "len": "__method_len__",
+                "split": "__method_str_split__",
+                "trim": "__method_str_trim__",
+                "starts_with": "__method_str_starts_with__",
+                "ends_with": "__method_str_ends_with__",
+                "to_upper": "__method_str_to_upper__",
+                "to_lower": "__method_str_to_lower__",
+                "replace": "__method_str_replace__",
+                "chars": "__method_str_chars__",
+                "contains": "__method_str_contains__",
+            }
+            if isinstance(obj, str) and method_name in string_methods:
+                return (string_methods[method_name], obj)
         if isinstance(obj, FSBowlInstance):
             type_name = obj.bowl_type.name
             for (tn, rn), methods in self.preps.items():
@@ -800,6 +856,46 @@ class Interpreter:
         self.preps[key] = methods
         return None
 
+    # --- Phase 4: Peel, conversion, math builtins ---
+
+    def _exec_PeelExpr(self, node: PeelExpr, env: Environment):
+        value = self._exec(node.value, env)
+        return self._type_name(value)
+
+    def _exec_ToAppleExpr(self, node: ToAppleExpr, env: Environment):
+        value = self._exec(node.value, env)
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            raise SplatError(f"Cannot convert {self._format_value(value)} to Apple", node.line, node.column)
+
+    def _exec_ToDateExpr(self, node: ToDateExpr, env: Environment):
+        value = self._exec(node.value, env)
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            raise SplatError(f"Cannot convert {self._format_value(value)} to Date", node.line, node.column)
+
+    def _exec_ToBananaExpr(self, node: ToBananaExpr, env: Environment):
+        value = self._exec(node.value, env)
+        return self._format_value(value)
+
+    def _exec_AbsExpr(self, node: AbsExpr, env: Environment):
+        value = self._exec(node.value, env)
+        if isinstance(value, (int, float)):
+            return abs(value)
+        raise RotError("abs() requires Apple or Date", node.line, node.column)
+
+    def _exec_MinExpr(self, node: MinExpr, env: Environment):
+        left = self._exec(node.left, env)
+        right = self._exec(node.right, env)
+        return min(left, right)
+
+    def _exec_MaxExpr(self, node: MaxExpr, env: Environment):
+        left = self._exec(node.left, env)
+        right = self._exec(node.right, env)
+        return max(left, right)
+
     # --- Function calls ---
 
     def _call_function(self, fn: FSFunction, args: list, line: int, col: int) -> object:
@@ -810,6 +906,10 @@ class Interpreter:
                 line, col,
             )
 
+        if self.call_depth >= self.MAX_CALL_DEPTH:
+            raise SplatError("Maximum recursion depth exceeded", line, col)
+        self.call_depth += 1
+
         call_env = Environment(fn.closure)
         for (param_name, _type_ann), arg_val in zip(defn.params, args):
             call_env.define(param_name, arg_val, immutable=False)
@@ -819,6 +919,8 @@ class Interpreter:
             return result
         except YieldSignal as ys:
             return ys.value
+        finally:
+            self.call_depth -= 1
 
     def _call_closure(self, closure: FSClosure, args: list, line: int, col: int) -> object:
         if len(args) != len(closure.params):
@@ -837,6 +939,8 @@ class Interpreter:
                 return self._exec(closure.body, call_env)
         except YieldSignal as ys:
             return ys.value
+        except TossSignal as ts:
+            return ts.value
 
     # Overload CallExpr to handle method tuples
     def _exec_CallExpr(self, node: CallExpr, env: Environment):
@@ -953,6 +1057,36 @@ class Interpreter:
                         return FSMedleyVariant("Ripe", "ripe", [item])
                 return FSMedleyVariant("Ripe", "pit", [])
 
+            # String methods
+            if method_name == "__method_str_split__":
+                if len(args) != 1:
+                    raise SplatError("split() takes exactly 1 argument", node.line, node.column)
+                return obj.split(args[0])
+            if method_name == "__method_str_trim__":
+                return obj.strip()
+            if method_name == "__method_str_starts_with__":
+                if len(args) != 1:
+                    raise SplatError("starts_with() takes exactly 1 argument", node.line, node.column)
+                return obj.startswith(args[0])
+            if method_name == "__method_str_ends_with__":
+                if len(args) != 1:
+                    raise SplatError("ends_with() takes exactly 1 argument", node.line, node.column)
+                return obj.endswith(args[0])
+            if method_name == "__method_str_to_upper__":
+                return obj.upper()
+            if method_name == "__method_str_to_lower__":
+                return obj.lower()
+            if method_name == "__method_str_replace__":
+                if len(args) != 2:
+                    raise SplatError("replace() takes exactly 2 arguments", node.line, node.column)
+                return obj.replace(args[0], args[1])
+            if method_name == "__method_str_chars__":
+                return list(obj)
+            if method_name == "__method_str_contains__":
+                if len(args) != 1:
+                    raise SplatError("contains() takes exactly 1 argument", node.line, node.column)
+                return args[0] in obj
+
         # Handle prep method tuples (3-element)
         if isinstance(callee, tuple) and len(callee) == 3 and callee[0] == "__prep_method__":
             _, obj, method_fn = callee
@@ -974,7 +1108,63 @@ class Interpreter:
                 )
             return FSMedleyVariant(callee.medley_name, callee.variant_name, args)
 
+        # Handle built-in functions
+        if isinstance(callee, str) and callee.startswith("__builtin_"):
+            return self._call_builtin(callee, args, node.line, node.column)
+
         raise SplatError(f"Cannot call {self._type_name(callee)} value", node.line, node.column)
+
+    def _call_builtin(self, name: str, args: list, line: int, col: int) -> object:
+        if name == "__builtin_peel__":
+            if len(args) != 1:
+                raise SplatError("peel() takes exactly 1 argument", line, col)
+            return self._type_name(args[0])
+        if name == "__builtin_abs__":
+            if len(args) != 1:
+                raise SplatError("abs() takes exactly 1 argument", line, col)
+            if isinstance(args[0], (int, float)):
+                return abs(args[0])
+            raise RotError("abs() requires Apple or Date", line, col)
+        if name == "__builtin_min__":
+            if len(args) != 2:
+                raise SplatError("min() takes exactly 2 arguments", line, col)
+            return min(args[0], args[1])
+        if name == "__builtin_max__":
+            if len(args) != 2:
+                raise SplatError("max() takes exactly 2 arguments", line, col)
+            return max(args[0], args[1])
+        if name == "__builtin_to_apple__":
+            if len(args) != 1:
+                raise SplatError("to_apple() takes exactly 1 argument", line, col)
+            try:
+                return int(args[0])
+            except (ValueError, TypeError):
+                raise SplatError(f"Cannot convert {self._format_value(args[0])} to Apple", line, col)
+        if name == "__builtin_to_date__":
+            if len(args) != 1:
+                raise SplatError("to_date() takes exactly 1 argument", line, col)
+            try:
+                return float(args[0])
+            except (ValueError, TypeError):
+                raise SplatError(f"Cannot convert {self._format_value(args[0])} to Date", line, col)
+        if name == "__builtin_to_banana__":
+            if len(args) != 1:
+                raise SplatError("to_banana() takes exactly 1 argument", line, col)
+            return self._format_value(args[0])
+        if name == "__builtin_char_code__":
+            if len(args) != 1 or not isinstance(args[0], str) or len(args[0]) != 1:
+                raise SplatError("char_code() takes exactly 1 single-character string", line, col)
+            return ord(args[0])
+        if name == "__builtin_from_char_code__":
+            if len(args) != 1 or not isinstance(args[0], int):
+                raise SplatError("from_char_code() takes exactly 1 Apple argument", line, col)
+            return chr(args[0])
+        if name == "__builtin_sqrt__":
+            if len(args) != 1:
+                raise SplatError("sqrt() takes exactly 1 argument", line, col)
+            import math
+            return math.sqrt(float(args[0]))
+        raise SplatError(f"Unknown built-in: {name}", line, col)
 
     # --- Helper methods ---
 

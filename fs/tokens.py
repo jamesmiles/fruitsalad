@@ -51,6 +51,15 @@ class TokenType(Enum):
     PREP = auto()       # trait implementation
     AS = auto()         # used in "prep X as Y"
 
+    # Phase 4 keywords
+    PEEL = auto()       # type introspection
+    TO_APPLE = auto()   # convert to int
+    TO_DATE = auto()    # convert to float
+    TO_BANANA = auto()  # convert to string
+    ABS = auto()        # absolute value
+    MIN = auto()        # min of two values
+    MAX = auto()        # max of two values
+
     # Operators
     PLUS = auto()
     MINUS = auto()

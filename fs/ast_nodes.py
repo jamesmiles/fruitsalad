@@ -281,3 +281,43 @@ class RipeExpr(ASTNode):
 class RotExpr(ASTNode):
     """rot(message) - creates Rot error value."""
     value: ASTNode = None
+
+
+# --- Phase 4: Peel, conversion builtins ---
+
+@dataclass
+class PeelExpr(ASTNode):
+    """peel(expr) - returns type name as string."""
+    value: ASTNode = None
+
+@dataclass
+class ToAppleExpr(ASTNode):
+    """to_apple(expr) - convert to int."""
+    value: ASTNode = None
+
+@dataclass
+class ToDateExpr(ASTNode):
+    """to_date(expr) - convert to float."""
+    value: ASTNode = None
+
+@dataclass
+class ToBananaExpr(ASTNode):
+    """to_banana(expr) - convert to string."""
+    value: ASTNode = None
+
+@dataclass
+class AbsExpr(ASTNode):
+    """abs(expr) - absolute value."""
+    value: ASTNode = None
+
+@dataclass
+class MinExpr(ASTNode):
+    """min(a, b) - minimum of two values."""
+    left: ASTNode = None
+    right: ASTNode = None
+
+@dataclass
+class MaxExpr(ASTNode):
+    """max(a, b) - maximum of two values."""
+    left: ASTNode = None
+    right: ASTNode = None
