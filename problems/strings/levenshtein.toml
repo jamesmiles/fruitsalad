@@ -1,0 +1,27 @@
+[problem]
+id = "str-004"
+name = "Levenshtein Distance"
+category = "strings"
+difficulty = "medium"
+source = "Rosetta Code"
+description = "Compute the Levenshtein (edit) distance between two strings, which is the minimum number of single-character insertions, deletions, or substitutions required to transform one string into the other"
+
+[[test_cases]]
+input = "\"kitten\", \"sitting\""
+expected_output = "3"
+
+[[test_cases]]
+input = "\"\", \"abc\""
+expected_output = "3"
+
+[[test_cases]]
+input = "\"abc\", \"abc\""
+expected_output = "0"
+
+[[test_cases]]
+input = "\"saturday\", \"sunday\""
+expected_output = "3"
+
+[[test_cases]]
+input = "\"flaw\", \"lawn\""
+expected_output = "2"

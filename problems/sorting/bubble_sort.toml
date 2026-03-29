@@ -1,0 +1,27 @@
+[problem]
+id = "sort-001"
+name = "Bubble Sort"
+category = "sorting"
+difficulty = "easy"
+source = "TheAlgorithms"
+description = "Implement bubble sort to sort an array of integers in ascending order"
+
+[[test_cases]]
+input = "[5, 3, 8, 1, 2]"
+expected_output = "[1, 2, 3, 5, 8]"
+
+[[test_cases]]
+input = "[]"
+expected_output = "[]"
+
+[[test_cases]]
+input = "[1]"
+expected_output = "[1]"
+
+[[test_cases]]
+input = "[9, 7, 5, 3, 1]"
+expected_output = "[1, 3, 5, 7, 9]"
+
+[[test_cases]]
+input = "[1, 2, 3, 4, 5]"
+expected_output = "[1, 2, 3, 4, 5]"

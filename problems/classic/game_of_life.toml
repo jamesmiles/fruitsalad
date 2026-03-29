@@ -1,0 +1,23 @@
+[problem]
+id = "classic-005"
+name = "Conway's Game of Life"
+category = "classic"
+difficulty = "medium"
+source = "Rosetta Code"
+description = "Simulate one step of Conway's Game of Life on a 2D grid. A live cell with 2-3 neighbors survives, a dead cell with exactly 3 neighbors becomes alive, all other cells die or stay dead."
+
+[[test_cases]]
+input = "[[0, 1, 0], [0, 0, 1], [1, 1, 1], [0, 0, 0]]"
+expected_output = "[[0, 0, 0], [1, 0, 1], [0, 1, 1], [0, 1, 0]]"
+
+[[test_cases]]
+input = "[[1, 1], [1, 1]]"
+expected_output = "[[1, 1], [1, 1]]"
+
+[[test_cases]]
+input = "[[0, 0, 0], [1, 1, 1], [0, 0, 0]]"
+expected_output = "[[0, 1, 0], [0, 1, 0], [0, 1, 0]]"
+
+[[test_cases]]
+input = "[[0, 0], [0, 0]]"
+expected_output = "[[0, 0], [0, 0]]"

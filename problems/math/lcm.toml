@@ -1,0 +1,27 @@
+[problem]
+id = "math-002"
+name = "Least Common Multiple"
+category = "math"
+difficulty = "easy"
+source = "Rosetta Code"
+description = "Compute the least common multiple (LCM) of two positive integers"
+
+[[test_cases]]
+input = "4, 6"
+expected_output = "12"
+
+[[test_cases]]
+input = "12, 18"
+expected_output = "36"
+
+[[test_cases]]
+input = "1, 5"
+expected_output = "5"
+
+[[test_cases]]
+input = "7, 13"
+expected_output = "91"
+
+[[test_cases]]
+input = "21, 6"
+expected_output = "42"

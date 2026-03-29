@@ -1,0 +1,27 @@
+[problem]
+id = "ds-007"
+name = "Trie (Prefix Tree)"
+category = "data_structures"
+difficulty = "medium"
+source = "LeetCode"
+description = "Implement a trie (prefix tree) supporting insert, search, and starts_with (prefix search) operations"
+
+[[test_cases]]
+input = "insert(\"apple\"), search(\"apple\"), search(\"app\")"
+expected_output = "search(apple)=true, search(app)=false"
+
+[[test_cases]]
+input = "insert(\"apple\"), starts_with(\"app\")"
+expected_output = "true"
+
+[[test_cases]]
+input = "insert(\"cat\"), insert(\"car\"), insert(\"card\"), search(\"car\"), starts_with(\"ca\")"
+expected_output = "search(car)=true, starts_with(ca)=true"
+
+[[test_cases]]
+input = "search(\"anything\")"
+expected_output = "false"
+
+[[test_cases]]
+input = "insert(\"hello\"), insert(\"help\"), starts_with(\"hel\"), starts_with(\"hex\")"
+expected_output = "starts_with(hel)=true, starts_with(hex)=false"

@@ -1,0 +1,23 @@
+[problem]
+id = "ds-006"
+name = "Min-Heap Implementation"
+category = "data_structures"
+difficulty = "medium"
+source = "CPython"
+description = "Implement a min-heap (priority queue) supporting insert, extract_min, peek, and heapify operations"
+
+[[test_cases]]
+input = "insert(5), insert(3), insert(8), insert(1), extract_min()"
+expected_output = "1"
+
+[[test_cases]]
+input = "insert(10), insert(20), insert(5), peek(), extract_min(), peek()"
+expected_output = "peek=5, extract_min=5, peek=10"
+
+[[test_cases]]
+input = "heapify([9, 4, 7, 1, 2]), extract_min(), extract_min()"
+expected_output = "extract_min=1, extract_min=2"
+
+[[test_cases]]
+input = "insert(42), peek(), extract_min(), is_empty()"
+expected_output = "peek=42, extract_min=42, is_empty=true"

@@ -1,0 +1,23 @@
+[problem]
+id = "conc-002"
+name = "Dining Philosophers"
+category = "concurrency"
+difficulty = "hard"
+source = "Rosetta Code"
+description = "Solve the dining philosophers problem for n philosophers seated around a circular table, each needing two forks to eat. Ensure no deadlock or starvation occurs."
+
+[[test_cases]]
+input = "philosophers=5, meals_each=3"
+expected_output = "total_meals=15, deadlock=false"
+
+[[test_cases]]
+input = "philosophers=3, meals_each=1"
+expected_output = "total_meals=3, deadlock=false"
+
+[[test_cases]]
+input = "philosophers=2, meals_each=5"
+expected_output = "total_meals=10, deadlock=false"
+
+[[test_cases]]
+input = "philosophers=5, meals_each=0"
+expected_output = "total_meals=0, deadlock=false"

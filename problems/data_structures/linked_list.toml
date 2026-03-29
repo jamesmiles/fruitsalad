@@ -1,0 +1,23 @@
+[problem]
+id = "ds-003"
+name = "Singly Linked List"
+category = "data_structures"
+difficulty = "medium"
+source = "Custom"
+description = "Implement a singly linked list supporting insert_at_head, insert_at_tail, delete, search, and to_list operations"
+
+[[test_cases]]
+input = "insert_at_head(3), insert_at_head(2), insert_at_head(1), to_list()"
+expected_output = "[1, 2, 3]"
+
+[[test_cases]]
+input = "insert_at_tail(1), insert_at_tail(2), insert_at_tail(3), delete(2), to_list()"
+expected_output = "[1, 3]"
+
+[[test_cases]]
+input = "insert_at_head(5), search(5), search(10)"
+expected_output = "search(5)=true, search(10)=false"
+
+[[test_cases]]
+input = "to_list()"
+expected_output = "[]"

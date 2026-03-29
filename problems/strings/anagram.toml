@@ -1,0 +1,27 @@
+[problem]
+id = "str-003"
+name = "Anagram Check"
+category = "strings"
+difficulty = "easy"
+source = "LeetCode"
+description = "Determine whether two strings are anagrams of each other (contain the same characters with the same frequencies)"
+
+[[test_cases]]
+input = "\"listen\", \"silent\""
+expected_output = "true"
+
+[[test_cases]]
+input = "\"hello\", \"world\""
+expected_output = "false"
+
+[[test_cases]]
+input = "\"anagram\", \"nagaram\""
+expected_output = "true"
+
+[[test_cases]]
+input = "\"\", \"\""
+expected_output = "true"
+
+[[test_cases]]
+input = "\"rat\", \"car\""
+expected_output = "false"

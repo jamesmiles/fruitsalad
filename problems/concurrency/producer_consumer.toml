@@ -1,0 +1,23 @@
+[problem]
+id = "conc-001"
+name = "Producer-Consumer"
+category = "concurrency"
+difficulty = "medium"
+source = "Custom"
+description = "Implement the producer-consumer pattern using a bounded buffer. Producers add items to the buffer and consumers remove them, with proper synchronization to avoid race conditions."
+
+[[test_cases]]
+input = "buffer_size=3, produce=[1, 2, 3, 4, 5], consumers=1"
+expected_output = "consumed=[1, 2, 3, 4, 5]"
+
+[[test_cases]]
+input = "buffer_size=1, produce=[10, 20, 30], consumers=1"
+expected_output = "consumed=[10, 20, 30]"
+
+[[test_cases]]
+input = "buffer_size=5, produce=[1, 2, 3], consumers=2"
+expected_output = "consumed_total=3"
+
+[[test_cases]]
+input = "buffer_size=2, produce=[], consumers=1"
+expected_output = "consumed=[]"

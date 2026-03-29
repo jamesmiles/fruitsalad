@@ -1,0 +1,27 @@
+[problem]
+id = "math-007"
+name = "Modular Exponentiation"
+category = "math"
+difficulty = "medium"
+source = "Rosetta Code"
+description = "Implement modular exponentiation to compute (base^exponent) mod modulus efficiently"
+
+[[test_cases]]
+input = "2, 10, 1000"
+expected_output = "24"
+
+[[test_cases]]
+input = "3, 13, 100"
+expected_output = "3"
+
+[[test_cases]]
+input = "5, 0, 7"
+expected_output = "1"
+
+[[test_cases]]
+input = "2, 20, 1000000007"
+expected_output = "1048576"
+
+[[test_cases]]
+input = "123, 456, 789"
+expected_output = "699"

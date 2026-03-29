@@ -1,0 +1,27 @@
+[problem]
+id = "search-002"
+name = "Binary Search"
+category = "searching"
+difficulty = "easy"
+source = "TheAlgorithms"
+description = "Implement binary search to find the index of a target value in a sorted array. Return -1 if not found."
+
+[[test_cases]]
+input = "[1, 3, 5, 7, 9, 11, 13], 7"
+expected_output = "3"
+
+[[test_cases]]
+input = "[1, 3, 5, 7, 9, 11, 13], 4"
+expected_output = "-1"
+
+[[test_cases]]
+input = "[], 5"
+expected_output = "-1"
+
+[[test_cases]]
+input = "[42], 42"
+expected_output = "0"
+
+[[test_cases]]
+input = "[2, 4, 6, 8, 10], 10"
+expected_output = "4"

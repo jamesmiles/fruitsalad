@@ -1,0 +1,23 @@
+[problem]
+id = "err-003"
+name = "Resource Exhaustion Handling"
+category = "error_handling"
+difficulty = "medium"
+source = "Custom"
+description = "Implement a resource pool with a fixed capacity that returns errors when resources are exhausted. Support acquire, release, and available_count operations."
+
+[[test_cases]]
+input = "capacity=3, acquire(), acquire(), acquire(), acquire()"
+expected_output = "ok, ok, ok, error(\"resource exhausted\")"
+
+[[test_cases]]
+input = "capacity=2, acquire(), release(), acquire(), acquire(), available_count()"
+expected_output = "ok, ok, ok, ok, available_count=0"
+
+[[test_cases]]
+input = "capacity=1, acquire(), release(), release()"
+expected_output = "ok, ok, error(\"no resource to release\")"
+
+[[test_cases]]
+input = "capacity=0, acquire()"
+expected_output = "error(\"resource exhausted\")"

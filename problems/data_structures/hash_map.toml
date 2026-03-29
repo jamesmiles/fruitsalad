@@ -1,0 +1,27 @@
+[problem]
+id = "ds-005"
+name = "Hash Map Implementation"
+category = "data_structures"
+difficulty = "medium"
+source = "CPython"
+description = "Implement a hash map (dictionary) supporting put, get, delete, and contains operations with collision handling"
+
+[[test_cases]]
+input = "put(\"apple\", 1), put(\"banana\", 2), get(\"apple\")"
+expected_output = "1"
+
+[[test_cases]]
+input = "put(\"key\", 10), put(\"key\", 20), get(\"key\")"
+expected_output = "20"
+
+[[test_cases]]
+input = "put(\"a\", 1), delete(\"a\"), contains(\"a\")"
+expected_output = "false"
+
+[[test_cases]]
+input = "get(\"missing\")"
+expected_output = "null"
+
+[[test_cases]]
+input = "put(\"x\", 100), contains(\"x\"), contains(\"y\")"
+expected_output = "contains(x)=true, contains(y)=false"

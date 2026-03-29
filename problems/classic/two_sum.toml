@@ -1,0 +1,23 @@
+[problem]
+id = "classic-002"
+name = "Two Sum"
+category = "classic"
+difficulty = "easy"
+source = "LeetCode"
+description = "Given an array of integers and a target sum, return the indices of the two numbers that add up to the target. Assume exactly one solution exists."
+
+[[test_cases]]
+input = "[2, 7, 11, 15], 9"
+expected_output = "[0, 1]"
+
+[[test_cases]]
+input = "[3, 2, 4], 6"
+expected_output = "[1, 2]"
+
+[[test_cases]]
+input = "[3, 3], 6"
+expected_output = "[0, 1]"
+
+[[test_cases]]
+input = "[1, 5, 8, 3, 9], 12"
+expected_output = "[2, 3]"

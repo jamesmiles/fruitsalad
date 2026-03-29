@@ -1,0 +1,27 @@
+[problem]
+id = "sort-003"
+name = "Insertion Sort"
+category = "sorting"
+difficulty = "easy"
+source = "TheAlgorithms"
+description = "Implement insertion sort to sort an array of integers in ascending order by building a sorted portion one element at a time"
+
+[[test_cases]]
+input = "[12, 11, 13, 5, 6]"
+expected_output = "[5, 6, 11, 12, 13]"
+
+[[test_cases]]
+input = "[]"
+expected_output = "[]"
+
+[[test_cases]]
+input = "[1]"
+expected_output = "[1]"
+
+[[test_cases]]
+input = "[4, 3, 2, 1]"
+expected_output = "[1, 2, 3, 4]"
+
+[[test_cases]]
+input = "[1, 2, 3, 4]"
+expected_output = "[1, 2, 3, 4]"

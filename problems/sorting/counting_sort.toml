@@ -1,0 +1,23 @@
+[problem]
+id = "sort-008"
+name = "Counting Sort"
+category = "sorting"
+difficulty = "easy"
+source = "TheAlgorithms"
+description = "Implement counting sort to sort an array of non-negative integers in ascending order by counting occurrences of each value"
+
+[[test_cases]]
+input = "[4, 2, 2, 8, 3, 3, 1]"
+expected_output = "[1, 2, 2, 3, 3, 4, 8]"
+
+[[test_cases]]
+input = "[]"
+expected_output = "[]"
+
+[[test_cases]]
+input = "[1, 1, 1, 1]"
+expected_output = "[1, 1, 1, 1]"
+
+[[test_cases]]
+input = "[5, 0, 3, 0, 2, 5]"
+expected_output = "[0, 0, 2, 3, 5, 5]"

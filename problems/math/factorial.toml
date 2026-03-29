@@ -1,0 +1,27 @@
+[problem]
+id = "math-005"
+name = "Factorial"
+category = "math"
+difficulty = "easy"
+source = "Rosetta Code"
+description = "Compute the factorial of a non-negative integer n, where n! = n * (n-1) * ... * 1 and 0! = 1"
+
+[[test_cases]]
+input = "0"
+expected_output = "1"
+
+[[test_cases]]
+input = "1"
+expected_output = "1"
+
+[[test_cases]]
+input = "5"
+expected_output = "120"
+
+[[test_cases]]
+input = "10"
+expected_output = "3628800"
+
+[[test_cases]]
+input = "12"
+expected_output = "479001600"

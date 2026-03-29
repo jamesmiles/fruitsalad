@@ -1,0 +1,23 @@
+[problem]
+id = "search-003"
+name = "Depth-First Search"
+category = "searching"
+difficulty = "medium"
+source = "TheAlgorithms"
+description = "Implement depth-first search on a graph represented as an adjacency list. Return the list of visited nodes starting from a given source node."
+
+[[test_cases]]
+input = "{0: [1, 2], 1: [3], 2: [4], 3: [], 4: []}, 0"
+expected_output = "[0, 1, 3, 2, 4]"
+
+[[test_cases]]
+input = "{0: [1], 1: [2], 2: [0]}, 0"
+expected_output = "[0, 1, 2]"
+
+[[test_cases]]
+input = "{0: []}, 0"
+expected_output = "[0]"
+
+[[test_cases]]
+input = "{0: [1, 2], 1: [2], 2: [3], 3: []}, 0"
+expected_output = "[0, 1, 2, 3]"

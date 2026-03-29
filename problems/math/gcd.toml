@@ -1,0 +1,27 @@
+[problem]
+id = "math-001"
+name = "Greatest Common Divisor"
+category = "math"
+difficulty = "easy"
+source = "Rosetta Code"
+description = "Implement the Euclidean algorithm to find the greatest common divisor (GCD) of two positive integers"
+
+[[test_cases]]
+input = "48, 18"
+expected_output = "6"
+
+[[test_cases]]
+input = "56, 98"
+expected_output = "14"
+
+[[test_cases]]
+input = "1, 1"
+expected_output = "1"
+
+[[test_cases]]
+input = "17, 13"
+expected_output = "1"
+
+[[test_cases]]
+input = "100, 75"
+expected_output = "25"

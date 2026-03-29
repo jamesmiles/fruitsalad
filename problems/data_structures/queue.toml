@@ -1,0 +1,23 @@
+[problem]
+id = "ds-002"
+name = "Queue Implementation"
+category = "data_structures"
+difficulty = "easy"
+source = "Custom"
+description = "Implement a queue data structure supporting enqueue, dequeue, front, and is_empty operations"
+
+[[test_cases]]
+input = "enqueue(1), enqueue(2), enqueue(3), dequeue(), front()"
+expected_output = "dequeue=1, front=2"
+
+[[test_cases]]
+input = "enqueue(10), enqueue(20), dequeue(), dequeue(), is_empty()"
+expected_output = "dequeue=10, dequeue=20, is_empty=true"
+
+[[test_cases]]
+input = "is_empty()"
+expected_output = "is_empty=true"
+
+[[test_cases]]
+input = "enqueue(5), front(), dequeue(), is_empty()"
+expected_output = "front=5, dequeue=5, is_empty=true"

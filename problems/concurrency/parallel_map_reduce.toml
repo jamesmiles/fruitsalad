@@ -1,0 +1,23 @@
+[problem]
+id = "conc-003"
+name = "Parallel Map-Reduce"
+category = "concurrency"
+difficulty = "hard"
+source = "Custom"
+description = "Implement a parallel map-reduce framework. The map phase applies a function to each element in parallel, and the reduce phase combines results. Demonstrate with summing squares of an array."
+
+[[test_cases]]
+input = "data=[1, 2, 3, 4, 5], map=square, reduce=sum, workers=2"
+expected_output = "55"
+
+[[test_cases]]
+input = "data=[10, 20, 30], map=square, reduce=sum, workers=3"
+expected_output = "1400"
+
+[[test_cases]]
+input = "data=[1, 1, 1, 1], map=square, reduce=sum, workers=2"
+expected_output = "4"
+
+[[test_cases]]
+input = "data=[], map=square, reduce=sum, workers=2"
+expected_output = "0"

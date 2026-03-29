@@ -1,0 +1,23 @@
+[problem]
+id = "graph-003"
+name = "Floyd-Warshall All-Pairs Shortest Path"
+category = "graph"
+difficulty = "hard"
+source = "Stony Brook"
+description = "Implement the Floyd-Warshall algorithm to find the shortest path distances between all pairs of nodes in a weighted graph"
+
+[[test_cases]]
+input = "matrix=[[0, 3, inf, 7], [8, 0, 2, inf], [5, inf, 0, 1], [2, inf, inf, 0]]"
+expected_output = "[[0, 3, 5, 6], [5, 0, 2, 3], [3, 6, 0, 1], [2, 5, 7, 0]]"
+
+[[test_cases]]
+input = "matrix=[[0, 1], [1, 0]]"
+expected_output = "[[0, 1], [1, 0]]"
+
+[[test_cases]]
+input = "matrix=[[0]]"
+expected_output = "[[0]]"
+
+[[test_cases]]
+input = "matrix=[[0, 5, inf], [inf, 0, 3], [inf, inf, 0]]"
+expected_output = "[[0, 5, 8], [inf, 0, 3], [inf, inf, 0]]"

@@ -1,0 +1,27 @@
+[problem]
+id = "math-006"
+name = "Exponentiation"
+category = "math"
+difficulty = "easy"
+source = "Rosetta Code"
+description = "Implement fast exponentiation (power function) to compute base^exponent for non-negative integer exponents"
+
+[[test_cases]]
+input = "2, 10"
+expected_output = "1024"
+
+[[test_cases]]
+input = "3, 0"
+expected_output = "1"
+
+[[test_cases]]
+input = "5, 3"
+expected_output = "125"
+
+[[test_cases]]
+input = "1, 100"
+expected_output = "1"
+
+[[test_cases]]
+input = "7, 4"
+expected_output = "2401"

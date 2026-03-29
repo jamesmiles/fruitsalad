@@ -1,0 +1,27 @@
+[problem]
+id = "sort-004"
+name = "Merge Sort"
+category = "sorting"
+difficulty = "medium"
+source = "TheAlgorithms"
+description = "Implement merge sort to sort an array of integers in ascending order using the divide-and-conquer approach"
+
+[[test_cases]]
+input = "[38, 27, 43, 3, 9, 82, 10]"
+expected_output = "[3, 9, 10, 27, 38, 43, 82]"
+
+[[test_cases]]
+input = "[]"
+expected_output = "[]"
+
+[[test_cases]]
+input = "[1]"
+expected_output = "[1]"
+
+[[test_cases]]
+input = "[5, 2, 8, 1, 9, 3]"
+expected_output = "[1, 2, 3, 5, 8, 9]"
+
+[[test_cases]]
+input = "[100, 50, 75, 25]"
+expected_output = "[25, 50, 75, 100]"

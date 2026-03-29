@@ -1,0 +1,31 @@
+[problem]
+id = "err-002"
+name = "Invalid Input Validation"
+category = "error_handling"
+difficulty = "easy"
+source = "Custom"
+description = "Implement a function that parses a string into an integer, returning a result type that indicates success or failure with an appropriate error message"
+
+[[test_cases]]
+input = "\"42\""
+expected_output = "ok(42)"
+
+[[test_cases]]
+input = "\"hello\""
+expected_output = "error(\"invalid integer: hello\")"
+
+[[test_cases]]
+input = "\"\""
+expected_output = "error(\"empty input\")"
+
+[[test_cases]]
+input = "\"-17\""
+expected_output = "ok(-17)"
+
+[[test_cases]]
+input = "\"12.5\""
+expected_output = "error(\"invalid integer: 12.5\")"
+
+[[test_cases]]
+input = "\"999999999999999999999\""
+expected_output = "error(\"integer overflow\")"

@@ -1,0 +1,27 @@
+[problem]
+id = "math-003"
+name = "Fibonacci Number"
+category = "math"
+difficulty = "easy"
+source = "Rosetta Code"
+description = "Compute the nth Fibonacci number where F(0) = 0, F(1) = 1, and F(n) = F(n-1) + F(n-2)"
+
+[[test_cases]]
+input = "0"
+expected_output = "0"
+
+[[test_cases]]
+input = "1"
+expected_output = "1"
+
+[[test_cases]]
+input = "10"
+expected_output = "55"
+
+[[test_cases]]
+input = "20"
+expected_output = "6765"
+
+[[test_cases]]
+input = "6"
+expected_output = "8"

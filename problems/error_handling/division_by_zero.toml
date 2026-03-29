@@ -1,0 +1,27 @@
+[problem]
+id = "err-001"
+name = "Division by Zero Handling"
+category = "error_handling"
+difficulty = "easy"
+source = "Custom"
+description = "Implement a safe division function that handles division by zero gracefully by returning an error value or message instead of crashing"
+
+[[test_cases]]
+input = "10, 2"
+expected_output = "ok(5)"
+
+[[test_cases]]
+input = "10, 0"
+expected_output = "error(\"division by zero\")"
+
+[[test_cases]]
+input = "0, 5"
+expected_output = "ok(0)"
+
+[[test_cases]]
+input = "-15, 3"
+expected_output = "ok(-5)"
+
+[[test_cases]]
+input = "7, 2"
+expected_output = "ok(3)"

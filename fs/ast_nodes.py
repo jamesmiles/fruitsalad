@@ -1,0 +1,191 @@
+"""AST node definitions for the Fruit Salad language."""
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class ASTNode:
+    line: int = 0
+    column: int = 0
+
+
+# --- Top level ---
+
+@dataclass
+class Program(ASTNode):
+    functions: list = field(default_factory=list)      # list of BlendDef
+    statements: list = field(default_factory=list)      # top-level statements (if any)
+
+
+@dataclass
+class BlendDef(ASTNode):
+    name: str = ""
+    params: list = field(default_factory=list)          # list of (name, type_annotation?)
+    return_type: Optional[str] = None
+    body: "Block" = None
+
+
+@dataclass
+class Block(ASTNode):
+    statements: list = field(default_factory=list)
+
+
+# --- Variable declarations ---
+
+@dataclass
+class PreserveDef(ASTNode):
+    """Immutable variable declaration: preserve x = expr"""
+    name: str = ""
+    type_annotation: Optional[str] = None
+    value: ASTNode = None
+
+
+@dataclass
+class FreshDef(ASTNode):
+    """Mutable variable declaration: fresh x = expr"""
+    name: str = ""
+    type_annotation: Optional[str] = None
+    value: ASTNode = None
+
+
+@dataclass
+class CandiedDef(ASTNode):
+    """Compile-time constant: candied X = expr"""
+    name: str = ""
+    type_annotation: Optional[str] = None
+    value: ASTNode = None
+
+
+@dataclass
+class Assignment(ASTNode):
+    """Assignment to existing variable: x = expr"""
+    target: ASTNode = None
+    value: ASTNode = None
+
+
+# --- Control flow ---
+
+@dataclass
+class IfExpr(ASTNode):
+    condition: ASTNode = None
+    then_block: Block = None
+    else_block: Optional[ASTNode] = None  # Block or IfExpr (for else if)
+
+
+@dataclass
+class WhileExpr(ASTNode):
+    condition: ASTNode = None
+    body: Block = None
+
+
+@dataclass
+class EachExpr(ASTNode):
+    variable: str = ""
+    iterable: ASTNode = None
+    body: Block = None
+
+
+@dataclass
+class LoopExpr(ASTNode):
+    body: Block = None
+
+
+@dataclass
+class SnapStmt(ASTNode):
+    """Break statement."""
+    pass
+
+
+@dataclass
+class SkipStmt(ASTNode):
+    """Continue statement."""
+    pass
+
+
+@dataclass
+class YieldStmt(ASTNode):
+    """Explicit return: yield expr"""
+    value: Optional[ASTNode] = None
+
+
+# --- Expressions ---
+
+@dataclass
+class BinaryExpr(ASTNode):
+    left: ASTNode = None
+    op: str = ""
+    right: ASTNode = None
+
+
+@dataclass
+class UnaryExpr(ASTNode):
+    op: str = ""
+    operand: ASTNode = None
+
+
+@dataclass
+class CallExpr(ASTNode):
+    callee: ASTNode = None
+    args: list = field(default_factory=list)
+
+
+@dataclass
+class IndexExpr(ASTNode):
+    object: ASTNode = None
+    index: ASTNode = None
+
+
+@dataclass
+class FieldExpr(ASTNode):
+    """Field/method access: obj.field"""
+    object: ASTNode = None
+    field: str = ""
+
+
+# --- Literals ---
+
+@dataclass
+class NumberLiteral(ASTNode):
+    value: object = None  # int or float
+
+
+@dataclass
+class StringLiteral(ASTNode):
+    value: str = ""
+
+
+@dataclass
+class BoolLiteral(ASTNode):
+    value: bool = False
+
+
+@dataclass
+class BasketLiteral(ASTNode):
+    elements: list = field(default_factory=list)
+
+
+@dataclass
+class RangeLiteral(ASTNode):
+    start: ASTNode = None
+    end: ASTNode = None
+    inclusive: bool = False
+
+
+@dataclass
+class Identifier(ASTNode):
+    name: str = ""
+
+
+@dataclass
+class StringInterpolation(ASTNode):
+    """String with interpolated expressions.
+    parts is a list of alternating string segments and expression AST nodes.
+    """
+    parts: list = field(default_factory=list)
+
+
+@dataclass
+class DisplayExpr(ASTNode):
+    """Built-in display() call."""
+    args: list = field(default_factory=list)

@@ -1,0 +1,23 @@
+[problem]
+id = "graph-004"
+name = "Kruskal's Minimum Spanning Tree"
+category = "graph"
+difficulty = "hard"
+source = "Stony Brook"
+description = "Implement Kruskal's algorithm to find the minimum spanning tree of an undirected weighted graph. Return the total weight of the MST."
+
+[[test_cases]]
+input = "edges=[(0,1,10), (0,2,6), (0,3,5), (1,3,15), (2,3,4)], nodes=4"
+expected_output = "19"
+
+[[test_cases]]
+input = "edges=[(0,1,1), (1,2,2), (0,2,3)], nodes=3"
+expected_output = "3"
+
+[[test_cases]]
+input = "edges=[(0,1,7), (0,3,5), (1,2,8), (1,3,9), (1,4,7), (2,4,5), (3,4,15), (3,5,6), (4,5,8), (4,6,9), (5,6,11)], nodes=7"
+expected_output = "39"
+
+[[test_cases]]
+input = "edges=[(0,1,1)], nodes=2"
+expected_output = "1"

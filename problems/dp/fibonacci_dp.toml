@@ -1,0 +1,27 @@
+[problem]
+id = "dp-001"
+name = "Fibonacci (Dynamic Programming)"
+category = "dp"
+difficulty = "easy"
+source = "TheAlgorithms"
+description = "Compute the nth Fibonacci number using dynamic programming (bottom-up tabulation or memoization) to achieve O(n) time complexity"
+
+[[test_cases]]
+input = "0"
+expected_output = "0"
+
+[[test_cases]]
+input = "1"
+expected_output = "1"
+
+[[test_cases]]
+input = "10"
+expected_output = "55"
+
+[[test_cases]]
+input = "30"
+expected_output = "832040"
+
+[[test_cases]]
+input = "50"
+expected_output = "12586269025"

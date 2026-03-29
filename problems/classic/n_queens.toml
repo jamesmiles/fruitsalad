@@ -1,0 +1,27 @@
+[problem]
+id = "classic-004"
+name = "N-Queens"
+category = "classic"
+difficulty = "hard"
+source = "LeetCode"
+description = "Place n queens on an n x n chessboard such that no two queens threaten each other. Return the number of distinct solutions."
+
+[[test_cases]]
+input = "1"
+expected_output = "1"
+
+[[test_cases]]
+input = "4"
+expected_output = "2"
+
+[[test_cases]]
+input = "8"
+expected_output = "92"
+
+[[test_cases]]
+input = "5"
+expected_output = "10"
+
+[[test_cases]]
+input = "6"
+expected_output = "4"

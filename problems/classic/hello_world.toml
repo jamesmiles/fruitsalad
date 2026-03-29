@@ -1,0 +1,19 @@
+[problem]
+id = "classic-006"
+name = "Hello World"
+category = "classic"
+difficulty = "easy"
+source = "Custom"
+description = "Print 'Hello, World!' to standard output"
+
+[[test_cases]]
+input = ""
+expected_output = "Hello, World!"
+
+[[test_cases]]
+input = "\"Fruit Salad\""
+expected_output = "Hello, Fruit Salad!"
+
+[[test_cases]]
+input = "\"World\""
+expected_output = "Hello, World!"

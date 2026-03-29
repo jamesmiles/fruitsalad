@@ -1,0 +1,23 @@
+[problem]
+id = "graph-002"
+name = "Bellman-Ford Shortest Path"
+category = "graph"
+difficulty = "medium"
+source = "Stony Brook"
+description = "Implement the Bellman-Ford algorithm to find shortest path distances from a source node to all other nodes, handling negative edge weights. Detect negative cycles."
+
+[[test_cases]]
+input = "edges=[(0,1,4), (0,2,5), (1,2,-3), (2,3,4)], source=0, nodes=4"
+expected_output = "[0, 4, 1, 5]"
+
+[[test_cases]]
+input = "edges=[(0,1,1), (1,2,1), (2,0,-3)], source=0, nodes=3"
+expected_output = "negative_cycle"
+
+[[test_cases]]
+input = "edges=[(0,1,2), (1,2,3)], source=0, nodes=3"
+expected_output = "[0, 2, 5]"
+
+[[test_cases]]
+input = "edges=[], source=0, nodes=1"
+expected_output = "[0]"

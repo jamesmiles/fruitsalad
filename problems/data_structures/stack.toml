@@ -1,0 +1,23 @@
+[problem]
+id = "ds-001"
+name = "Stack Implementation"
+category = "data_structures"
+difficulty = "easy"
+source = "Custom"
+description = "Implement a stack data structure supporting push, pop, peek, and is_empty operations"
+
+[[test_cases]]
+input = "push(1), push(2), push(3), pop(), peek()"
+expected_output = "pop=3, peek=2"
+
+[[test_cases]]
+input = "push(10), push(20), pop(), pop(), is_empty()"
+expected_output = "pop=20, pop=10, is_empty=true"
+
+[[test_cases]]
+input = "is_empty()"
+expected_output = "is_empty=true"
+
+[[test_cases]]
+input = "push(42), peek(), pop(), is_empty()"
+expected_output = "peek=42, pop=42, is_empty=true"

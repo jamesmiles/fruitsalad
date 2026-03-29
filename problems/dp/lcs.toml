@@ -1,0 +1,27 @@
+[problem]
+id = "dp-003"
+name = "Longest Common Subsequence"
+category = "dp"
+difficulty = "medium"
+source = "LeetCode"
+description = "Find the length of the longest common subsequence between two strings"
+
+[[test_cases]]
+input = "\"abcde\", \"ace\""
+expected_output = "3"
+
+[[test_cases]]
+input = "\"abc\", \"abc\""
+expected_output = "3"
+
+[[test_cases]]
+input = "\"abc\", \"def\""
+expected_output = "0"
+
+[[test_cases]]
+input = "\"\", \"abc\""
+expected_output = "0"
+
+[[test_cases]]
+input = "\"AGGTAB\", \"GXTXAYB\""
+expected_output = "4"

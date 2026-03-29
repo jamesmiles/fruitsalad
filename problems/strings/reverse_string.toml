@@ -1,0 +1,27 @@
+[problem]
+id = "str-001"
+name = "Reverse String"
+category = "strings"
+difficulty = "easy"
+source = "LeetCode"
+description = "Reverse a given string and return the result"
+
+[[test_cases]]
+input = "\"hello\""
+expected_output = "\"olleh\""
+
+[[test_cases]]
+input = "\"\""
+expected_output = "\"\""
+
+[[test_cases]]
+input = "\"a\""
+expected_output = "\"a\""
+
+[[test_cases]]
+input = "\"racecar\""
+expected_output = "\"racecar\""
+
+[[test_cases]]
+input = "\"Fruit Salad\""
+expected_output = "\"dalaS tiurF\""
