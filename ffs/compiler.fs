@@ -241,18 +241,22 @@ blend tokenize(source) {
             skip
         }
 
+        -- three-char operators first
+        if pos + 2 < slen {
+            fresh three = c + source[pos + 1] + source[pos + 2]
+            if three == "..=" {
+                tokens.push(mk_tok("OP", "..=", line))
+                pos = pos + 3
+                skip
+            }
+        }
+
         -- two-char operators
         if pos + 1 < slen {
             fresh two = c + source[pos + 1]
             if two == "==" || two == "!=" || two == "<=" || two == ">=" || two == "&&" || two == "||" || two == ".." || two == "->" {
                 tokens.push(mk_tok("OP", two, line))
                 pos = pos + 2
-                skip
-            }
-            -- ..= three char
-            if two == ".." && pos + 2 < slen && source[pos + 2] == "=" {
-                tokens.push(mk_tok("OP", "..=", line))
-                pos = pos + 3
                 skip
             }
         }
