@@ -277,7 +277,7 @@ blend tokenize(source) {
         -- two-char operators
         if pos + 1 < slen {
             fresh two = c + source[pos + 1]
-            if two == "==" || two == "!=" || two == "<=" || two == ">=" || two == "&&" || two == "||" || two == ".." || two == "->" {
+            if two == "==" || two == "!=" || two == "<=" || two == ">=" || two == "&&" || two == "||" || two == ".." || two == "->" || two == "~>" {
                 tokens.push(mk_tok("OP", two, line))
                 pos = pos + 2
                 skip
@@ -401,7 +401,8 @@ blend parse(tokens) {
 -- Parse a blend definition
 blend parse_blend_def(tokens, pos_ref) {
     parser_expect(tokens, pos_ref, "KW", "blend")
-    preserve name_tok = parser_expect(tokens, pos_ref, "ID", "")
+    -- Accept both ID and KW as function name (e.g. blend char_code(c))
+    preserve name_tok = parser_advance(tokens, pos_ref)
     preserve name = name_tok[1]
     parser_expect(tokens, pos_ref, "DELIM", "(")
     fresh params = []
@@ -628,14 +629,42 @@ blend parse_equality(tokens, pos_ref) {
 }
 
 blend parse_comparison(tokens, pos_ref) {
-    fresh left = parse_range(tokens, pos_ref)
+    fresh left = parse_pipeline(tokens, pos_ref)
     loop {
         preserve tok = parser_peek(tokens, pos_ref)
         if tok[0] == "OP" && (tok[1] == "<" || tok[1] == ">" || tok[1] == "<=" || tok[1] == ">=") {
             preserve op = tok[1]
             parser_advance(tokens, pos_ref)
-            preserve right = parse_range(tokens, pos_ref)
+            preserve right = parse_pipeline(tokens, pos_ref)
             left = ["BinOp", op, left, right]
+        } else {
+            snap
+        }
+    }
+    left
+}
+
+blend parse_pipeline(tokens, pos_ref) {
+    fresh left = parse_range(tokens, pos_ref)
+    loop {
+        preserve tok = parser_peek(tokens, pos_ref)
+        if tok[0] == "OP" && tok[1] == "~>" {
+            parser_advance(tokens, pos_ref)
+            -- Right side: parse a postfix expression (function call or identifier)
+            preserve right = parse_postfix(tokens, pos_ref)
+            -- Transform: left ~> f(args) => f(left, args)
+            --            left ~> f      => f(left)
+            if right[0] == "Call" {
+                -- Insert left as first arg
+                fresh new_args = [left]
+                each i in 0..right[2].len() {
+                    new_args.push(right[2][i])
+                }
+                left = ["Call", right[1], new_args]
+            } else {
+                -- Just call with left as sole arg
+                left = ["Call", right, [left]]
+            }
         } else {
             snap
         }
@@ -977,7 +1006,9 @@ blend gen_program(node, level) {
     result = result + "    return str(v)\n"
     result = result + "def _fs_display(*args): print(' '.join(_fs_fmt(a) for a in args))\n"
     result = result + "_fs_type_map = " + from_char_code(123) + "'int':'Apple','float':'Date','str':'Banana','bool':'Cherry','list':'Basket','NoneType':'Pit'" + from_char_code(125) + "\n"
-    result = result + "def _fs_peel(v): return _fs_type_map.get(type(v).__name__, type(v).__name__)\n\n"
+    result = result + "def _fs_peel(v): return _fs_type_map.get(type(v).__name__, type(v).__name__)\n"
+    result = result + "def char_code(c): return ord(c)\n"
+    result = result + "def from_char_code(n): return chr(n)\n\n"
 
     preserve funcs = node[1]
     preserve stmts = node[2]
@@ -1039,7 +1070,7 @@ blend is_expression_node(node) {
     if typ == "BinOp" || typ == "UnaryOp" || typ == "Call" || typ == "MethodCall" ||
        typ == "Ident" || typ == "NumLit" || typ == "FloatLit" || typ == "StrLit" ||
        typ == "BoolLit" || typ == "BasketLit" || typ == "Index" || typ == "Field" ||
-       typ == "StrInterp" {
+       typ == "StrInterp" || typ == "Closure" || typ == "InterpStr" {
         yield true
     }
     false
@@ -1049,6 +1080,13 @@ blend gen_with_return(node, level) {
     -- Generate a statement that should be the return value of a function
     -- If it's a bare expression, add 'return'. If it's an if/else, recurse into branches.
     preserve typ = node[0]
+    -- Don't add return to method calls that are pure side-effects (swap, push)
+    -- But DO add return to pop() since it returns a value
+    if typ == "MethodCall" {
+        if node[2] == "swap" || node[2] == "push" || node[2] == "append" {
+            yield generate(node, level)
+        }
+    }
     if is_expression_node(node) {
         yield make_indent(level) + "return " + gen_expr(node)
     }
@@ -1361,12 +1399,10 @@ blend gen_call(node) {
     if func_name == "sqrt" {
         yield "__import__('math').sqrt(" + gen_expr(args[0]) + ")"
     }
-    if func_name == "char_code" {
-        yield "ord(" + gen_expr(args[0]) + ")"
-    }
-    if func_name == "from_char_code" {
-        yield "chr(" + gen_expr(args[0]) + ")"
-    }
+    -- char_code and from_char_code are NOT mapped to ord/chr here
+    -- because user programs may define their own char_code function
+    -- (e.g. anagram.fs maps a-z to 0-25). Instead these are defined
+    -- as Python helpers in the runtime preamble.
     if func_name == "abs" {
         yield "abs(" + gen_expr(args[0]) + ")"
     }
