@@ -7,6 +7,8 @@ from .ast_nodes import (
     BinaryExpr, UnaryExpr, CallExpr, IndexExpr, FieldExpr,
     NumberLiteral, StringLiteral, BoolLiteral, BasketLiteral, RangeLiteral,
     Identifier, StringInterpolation, DisplayExpr, ASTNode,
+    BowlDef, BowlLiteral, MedleyDef, MedleyVariantExpr, SortExpr,
+    SqueezeLiteral, PantryLiteral,
 )
 from .errors import SplatError, RotError
 
@@ -72,6 +74,64 @@ class FSFunction:
         return f"<blend {self.defn.name}>"
 
 
+# --- Phase 2 runtime types ---
+
+class FSBowlType:
+    """Bowl (struct) type definition."""
+    def __init__(self, name: str, fields: list):
+        self.name = name
+        self.fields = fields  # list of (name, type_annotation?)
+
+    def __repr__(self):
+        return f"<bowl {self.name}>"
+
+
+class FSBowlInstance:
+    """Runtime bowl instance."""
+    def __init__(self, bowl_type: FSBowlType, field_values: dict):
+        self.bowl_type = bowl_type
+        self.field_values = field_values  # dict of field_name -> value
+
+    def __repr__(self):
+        fields = ", ".join(f"{k}: {v!r}" for k, v in self.field_values.items())
+        return f"{self.bowl_type.name} {{ {fields} }}"
+
+
+class FSMedleyType:
+    """Medley (enum) type definition."""
+    def __init__(self, name: str, variants: list):
+        self.name = name
+        self.variants = variants  # list of (variant_name, fields_or_None)
+
+    def __repr__(self):
+        return f"<medley {self.name}>"
+
+
+class FSMedleyVariant:
+    """Runtime medley variant instance."""
+    def __init__(self, medley_name: str, variant_name: str, values: list):
+        self.medley_name = medley_name
+        self.variant_name = variant_name
+        self.values = values  # list of values
+
+    def __repr__(self):
+        if self.values:
+            args = ", ".join(repr(v) for v in self.values)
+            return f"{self.medley_name}.{self.variant_name}({args})"
+        return f"{self.medley_name}.{self.variant_name}"
+
+
+class FSClosure:
+    """A closure (squeeze) - lambda with captured environment."""
+    def __init__(self, params: list, body, closure: 'Environment'):
+        self.params = params  # list of (name, type_ann?)
+        self.body = body
+        self.closure = closure
+
+    def __repr__(self):
+        return f"<squeeze>"
+
+
 # --- Interpreter ---
 
 class Interpreter:
@@ -84,16 +144,15 @@ class Interpreter:
         for fn in program.functions:
             self.globals.define(fn.name, FSFunction(fn, self.globals), immutable=True)
 
+        # Second pass: execute top-level statements (Bowl/Medley defs, constants, etc.)
+        for stmt in program.statements:
+            self._exec(stmt, self.globals)
+
         # If there's a main function, call it
         if "main" in self.globals.variables:
             main_fn = self.globals.variables["main"]
             if isinstance(main_fn, FSFunction):
                 self._call_function(main_fn, [], 0, 0)
-                return
-
-        # Otherwise execute top-level statements
-        for stmt in program.statements:
-            self._exec(stmt, self.globals)
 
     def _exec(self, node: ASTNode, env: Environment) -> object:
         """Execute a statement/expression and return its value."""
@@ -133,6 +192,15 @@ class Interpreter:
 
         if isinstance(target, Identifier):
             env.set(target.name, value, node.line, node.column)
+        elif isinstance(target, FieldExpr):
+            obj = self._exec(target.object, env)
+            if isinstance(obj, FSBowlInstance):
+                if target.field in obj.field_values:
+                    obj.field_values[target.field] = value
+                else:
+                    raise SplatError(f"No field '{target.field}' on bowl '{obj.bowl_type.name}'", node.line, node.column)
+            else:
+                raise RotError("Cannot field-assign to non-Bowl value", node.line, node.column)
         elif isinstance(target, IndexExpr):
             obj = self._exec(target.object, env)
             idx = self._exec(target.index, env)
@@ -321,6 +389,35 @@ class Interpreter:
         obj = self._exec(node.object, env)
         field = node.field
 
+        # Bowl instance field access
+        if isinstance(obj, FSBowlInstance):
+            if field in obj.field_values:
+                return obj.field_values[field]
+            raise SplatError(f"No field '{field}' on bowl '{obj.bowl_type.name}'", node.line, node.column)
+
+        # Medley type: return variant constructor or unit variant
+        if isinstance(obj, FSMedleyType):
+            # Find the variant
+            for vname, vfields in obj.variants:
+                if vname == field:
+                    if vfields is None or len(vfields) == 0:
+                        # Unit variant - return the variant directly
+                        return FSMedleyVariant(obj.name, field, [])
+                    else:
+                        # Variant with fields - return a constructor closure
+                        medley_name = obj.name
+                        variant_name = field
+                        expected_count = len(vfields)
+                        class _VariantConstructor:
+                            def __init__(self, mn, vn, cnt):
+                                self.medley_name = mn
+                                self.variant_name = vn
+                                self.expected_count = cnt
+                            def __repr__(self):
+                                return f"<{self.medley_name}.{self.variant_name} constructor>"
+                        return _VariantConstructor(medley_name, variant_name, expected_count)
+            raise SplatError(f"No variant '{field}' on medley '{obj.name}'", node.line, node.column)
+
         # Method calls: return a bound method tuple
         if isinstance(obj, (list, str)):
             if field == "len":
@@ -332,6 +429,14 @@ class Interpreter:
                     return ("__method_pop__", obj)
                 if field == "swap":
                     return ("__method_swap__", obj)
+                if field == "copy":
+                    return ("__method_copy__", obj)
+                if field == "contains":
+                    return ("__method_contains__", obj)
+                if field == "remove":
+                    return ("__method_remove__", obj)
+                if field == "slice":
+                    return ("__method_slice__", obj)
 
         raise SplatError(f"No field '{field}' on {self._type_name(obj)}", node.line, node.column)
 
@@ -351,6 +456,104 @@ class Interpreter:
                 parts.append(self._format_value(val))
         return "".join(parts)
 
+    # --- Phase 2: Bowl, Medley, Sort, Squeeze ---
+
+    def _exec_BowlDef(self, node: BowlDef, env: Environment):
+        bowl_type = FSBowlType(node.name, node.fields)
+        env.define(node.name, bowl_type, immutable=True)
+        return bowl_type
+
+    def _exec_BowlLiteral(self, node: BowlLiteral, env: Environment):
+        bowl_type = env.get(node.name, node.line, node.column)
+        if not isinstance(bowl_type, FSBowlType):
+            raise SplatError(f"'{node.name}' is not a Bowl type", node.line, node.column)
+        field_values = {}
+        for fname, fexpr in node.field_values:
+            field_values[fname] = self._exec(fexpr, env)
+        # Validate field names
+        defined_fields = {f[0] for f in bowl_type.fields}
+        for fname in field_values:
+            if fname not in defined_fields:
+                raise SplatError(f"Unknown field '{fname}' for bowl '{node.name}'", node.line, node.column)
+        return FSBowlInstance(bowl_type, field_values)
+
+    def _exec_MedleyDef(self, node: MedleyDef, env: Environment):
+        medley_type = FSMedleyType(node.name, node.variants)
+        env.define(node.name, medley_type, immutable=True)
+        return medley_type
+
+    def _exec_MedleyVariantExpr(self, node: MedleyVariantExpr, env: Environment):
+        args = [self._exec(a, env) for a in node.args]
+        return FSMedleyVariant(node.medley_name, node.variant_name, args)
+
+    def _exec_SortExpr(self, node: SortExpr, env: Environment):
+        subject = self._exec(node.subject, env)
+        for pattern, guard, body in node.arms:
+            bindings = {}
+            if self._match_pattern(pattern, subject, bindings):
+                # Check guard if present
+                if guard is not None:
+                    guard_env = Environment(env)
+                    for k, v in bindings.items():
+                        guard_env.define(k, v, immutable=False)
+                    if not self._truthy(self._exec(guard, guard_env)):
+                        continue
+                # Execute body
+                arm_env = Environment(env)
+                for k, v in bindings.items():
+                    arm_env.define(k, v, immutable=False)
+                if isinstance(body, Block):
+                    return self._exec_block(body, arm_env)
+                else:
+                    return self._exec(body, arm_env)
+        raise SplatError("non-exhaustive sort", node.line, node.column)
+
+    def _match_pattern(self, pattern, subject, bindings: dict) -> bool:
+        """Try to match a pattern against a subject value.
+        If successful, populate bindings dict and return True."""
+        kind = pattern[0]
+
+        if kind == "wildcard":
+            return True
+
+        if kind == "literal":
+            return subject == pattern[1]
+
+        if kind == "binding":
+            name = pattern[1]
+            bindings[name] = subject
+            return True
+
+        if kind == "variant":
+            _, medley_name, variant_name, binding_names = pattern
+            if not isinstance(subject, FSMedleyVariant):
+                return False
+            if subject.variant_name != variant_name:
+                return False
+            # Optionally check medley_name matches
+            if subject.medley_name != medley_name:
+                return False
+            if binding_names:
+                if len(binding_names) != len(subject.values):
+                    return False
+                for bname, val in zip(binding_names, subject.values):
+                    if bname != "_":
+                        bindings[bname] = val
+            return True
+
+        return False
+
+    def _exec_SqueezeLiteral(self, node: SqueezeLiteral, env: Environment):
+        return FSClosure(node.params, node.body, env)
+
+    def _exec_PantryLiteral(self, node: PantryLiteral, env: Environment):
+        entries = {}
+        for key_expr, val_expr in node.entries:
+            key = self._exec(key_expr, env)
+            val = self._exec(val_expr, env)
+            entries[key] = val
+        return entries
+
     # --- Function calls ---
 
     def _call_function(self, fn: FSFunction, args: list, line: int, col: int) -> object:
@@ -368,6 +571,24 @@ class Interpreter:
         try:
             result = self._exec_block(defn.body, call_env)
             return result
+        except YieldSignal as ys:
+            return ys.value
+
+    def _call_closure(self, closure: FSClosure, args: list, line: int, col: int) -> object:
+        if len(args) != len(closure.params):
+            raise SplatError(
+                f"squeeze expects {len(closure.params)} argument(s), got {len(args)}",
+                line, col,
+            )
+        call_env = Environment(closure.closure)
+        for (param_name, _type_ann), arg_val in zip(closure.params, args):
+            call_env.define(param_name, arg_val, immutable=False)
+
+        try:
+            if isinstance(closure.body, Block):
+                return self._exec_block(closure.body, call_env)
+            else:
+                return self._exec(closure.body, call_env)
         except YieldSignal as ys:
             return ys.value
 
@@ -405,9 +626,46 @@ class Interpreter:
                     raise SplatError("swap() index out of range", node.line, node.column)
                 obj[i], obj[j] = obj[j], obj[i]
                 return None
+            if method_name == "__method_copy__":
+                if args:
+                    raise SplatError("copy() takes no arguments", node.line, node.column)
+                return list(obj)
+            if method_name == "__method_contains__":
+                if len(args) != 1:
+                    raise SplatError("contains() takes exactly 1 argument", node.line, node.column)
+                return args[0] in obj
+            if method_name == "__method_remove__":
+                if len(args) != 1:
+                    raise SplatError("remove() takes exactly 1 argument", node.line, node.column)
+                idx = args[0]
+                if not isinstance(idx, int):
+                    raise RotError("remove() index must be an Apple (integer)", node.line, node.column)
+                if idx < 0 or idx >= len(obj):
+                    raise SplatError(f"remove() index {idx} out of range (length {len(obj)})", node.line, node.column)
+                return obj.pop(idx)
+            if method_name == "__method_slice__":
+                if len(args) != 2:
+                    raise SplatError("slice() takes exactly 2 arguments", node.line, node.column)
+                start, end = args
+                if not isinstance(start, int) or not isinstance(end, int):
+                    raise RotError("slice() arguments must be Apple (integer)", node.line, node.column)
+                return obj[start:end]
 
         if isinstance(callee, FSFunction):
             return self._call_function(callee, args, node.line, node.column)
+
+        # Handle closures (squeeze)
+        if isinstance(callee, FSClosure):
+            return self._call_closure(callee, args, node.line, node.column)
+
+        # Handle variant constructors
+        if hasattr(callee, 'medley_name') and hasattr(callee, 'variant_name') and hasattr(callee, 'expected_count'):
+            if len(args) != callee.expected_count:
+                raise SplatError(
+                    f"Variant '{callee.medley_name}.{callee.variant_name}' expects {callee.expected_count} argument(s), got {len(args)}",
+                    node.line, node.column,
+                )
+            return FSMedleyVariant(callee.medley_name, callee.variant_name, args)
 
         raise SplatError(f"Cannot call {self._type_name(callee)} value", node.line, node.column)
 
@@ -503,6 +761,20 @@ class Interpreter:
             return f"[{inner}]"
         if isinstance(value, FSFunction):
             return repr(value)
+        if isinstance(value, FSBowlInstance):
+            fields = ", ".join(f"{k}: {self._format_value(v)}" for k, v in value.field_values.items())
+            return f"{value.bowl_type.name} {{ {fields} }}"
+        if isinstance(value, FSMedleyVariant):
+            if value.values:
+                args = ", ".join(self._format_value(v) for v in value.values)
+                return f"{value.medley_name}.{value.variant_name}({args})"
+            return f"{value.medley_name}.{value.variant_name}"
+        if isinstance(value, FSBowlType):
+            return repr(value)
+        if isinstance(value, FSMedleyType):
+            return repr(value)
+        if isinstance(value, FSClosure):
+            return repr(value)
         return str(value)
 
     def _type_name(self, value: object) -> str:
@@ -520,4 +792,14 @@ class Interpreter:
             return "Basket"
         if isinstance(value, FSFunction):
             return "Blend"
+        if isinstance(value, FSBowlInstance):
+            return f"Bowl({value.bowl_type.name})"
+        if isinstance(value, FSMedleyVariant):
+            return f"Medley({value.medley_name})"
+        if isinstance(value, FSBowlType):
+            return "BowlType"
+        if isinstance(value, FSMedleyType):
+            return "MedleyType"
+        if isinstance(value, FSClosure):
+            return "Squeeze"
         return type(value).__name__

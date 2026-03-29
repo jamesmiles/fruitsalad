@@ -26,6 +26,9 @@ KEYWORDS = {
     "Banana": TokenType.BANANA,
     "Cherry": TokenType.CHERRY,
     "Basket": TokenType.BASKET,
+    "bowl": TokenType.BOWL,
+    "medley": TokenType.MEDLEY,
+    "sort": TokenType.SORT,
 }
 
 
@@ -263,6 +266,8 @@ class Lexer:
             self.advance()
             if self.match("="):
                 return Token(TokenType.EQUAL_EQUAL, "==", start_line, start_col)
+            if self.match(">"):
+                return Token(TokenType.FAT_ARROW, "=>", start_line, start_col)
             return Token(TokenType.ASSIGN, "=", start_line, start_col)
 
         if ch == "!":
@@ -293,7 +298,7 @@ class Lexer:
             self.advance()
             if self.match("|"):
                 return Token(TokenType.OR_OR, "||", start_line, start_col)
-            raise self.error("Unexpected character '|'. Did you mean '||'?")
+            return Token(TokenType.PIPE, "|", start_line, start_col)
 
         if ch == ".":
             self.advance()

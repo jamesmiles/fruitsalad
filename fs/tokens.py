@@ -36,6 +36,12 @@ class TokenType(Enum):
     CHERRY = auto()     # bool
     BASKET = auto()     # array
 
+    # Phase 2 keywords
+    BOWL = auto()       # struct
+    MEDLEY = auto()     # enum
+    SORT = auto()       # pattern matching
+    PANTRY = auto()     # hash map type
+
     # Operators
     PLUS = auto()
     MINUS = auto()
@@ -64,6 +70,8 @@ class TokenType(Enum):
     COLON = auto()
     ARROW = auto()      # ->
     SMOOTHIE = auto()   # ~>
+    FAT_ARROW = auto()  # =>
+    PIPE = auto()       # |
     DOT_DOT = auto()    # ..
     DOT_DOT_EQ = auto() # ..=
     DOT = auto()

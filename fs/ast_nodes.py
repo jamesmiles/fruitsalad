@@ -189,3 +189,48 @@ class StringInterpolation(ASTNode):
 class DisplayExpr(ASTNode):
     """Built-in display() call."""
     args: list = field(default_factory=list)
+
+
+# --- Phase 2: Bowls, Medleys, Sort, Squeeze ---
+
+@dataclass
+class BowlDef(ASTNode):
+    """Bowl (struct) definition: bowl Name { field1: Type, field2: Type }"""
+    name: str = ""
+    fields: list = field(default_factory=list)  # list of (name, type_annotation?)
+
+@dataclass
+class BowlLiteral(ASTNode):
+    """Bowl instantiation: Name { field1: value1, field2: value2 }"""
+    name: str = ""
+    field_values: list = field(default_factory=list)  # list of (name, value_expr)
+
+@dataclass
+class MedleyDef(ASTNode):
+    """Medley (enum) definition: medley Name { Variant1, Variant2(field: Type) }"""
+    name: str = ""
+    variants: list = field(default_factory=list)  # list of (variant_name, fields?)
+
+@dataclass
+class MedleyVariantExpr(ASTNode):
+    """Medley variant construction: Name.Variant(args) or Name.Variant"""
+    medley_name: str = ""
+    variant_name: str = ""
+    args: list = field(default_factory=list)
+
+@dataclass
+class SortExpr(ASTNode):
+    """Pattern matching: sort expr { pattern => result, ... }"""
+    subject: ASTNode = None
+    arms: list = field(default_factory=list)  # list of (pattern, guard?, body)
+
+@dataclass
+class SqueezeLiteral(ASTNode):
+    """Lambda/closure: |params| { body } or |params| expr"""
+    params: list = field(default_factory=list)  # list of (name, type_ann?)
+    body: ASTNode = None  # Block or expression
+
+@dataclass
+class PantryLiteral(ASTNode):
+    """Pantry (map) literal: {key: value, key: value}"""
+    entries: list = field(default_factory=list)  # list of (key_expr, value_expr)

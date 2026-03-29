@@ -8,6 +8,8 @@ from .ast_nodes import (
     BinaryExpr, UnaryExpr, CallExpr, IndexExpr, FieldExpr,
     NumberLiteral, StringLiteral, BoolLiteral, BasketLiteral, RangeLiteral,
     Identifier, StringInterpolation, DisplayExpr,
+    BowlDef, BowlLiteral, MedleyDef, MedleyVariantExpr, SortExpr,
+    SqueezeLiteral, PantryLiteral,
 )
 from .errors import ParseError
 
@@ -15,6 +17,7 @@ from .errors import ParseError
 TYPE_TOKENS = {
     TokenType.APPLE, TokenType.DATE, TokenType.BANANA,
     TokenType.CHERRY, TokenType.BASKET, TokenType.IDENTIFIER,
+    TokenType.BOWL, TokenType.MEDLEY, TokenType.SORT,
 }
 
 
@@ -78,6 +81,10 @@ class Parser:
         while not self.at_end():
             if self.peek() == TokenType.BLEND:
                 prog.functions.append(self.parse_blend_def())
+            elif self.peek() == TokenType.BOWL:
+                prog.statements.append(self.parse_bowl_def())
+            elif self.peek() == TokenType.MEDLEY:
+                prog.statements.append(self.parse_medley_def())
             else:
                 prog.statements.append(self.parse_statement())
         return prog
@@ -129,6 +136,10 @@ class Parser:
     def parse_statement(self):
         tt = self.peek()
 
+        if tt == TokenType.BOWL:
+            return self.parse_bowl_def()
+        if tt == TokenType.MEDLEY:
+            return self.parse_medley_def()
         if tt == TokenType.PRESERVE:
             return self.parse_preserve()
         if tt == TokenType.FRESH:
@@ -249,6 +260,188 @@ class Parser:
                 args.append(self.parse_expression())
         self.expect(TokenType.RPAREN, "Expected ')' after display arguments")
         return DisplayExpr(line=tok.line, column=tok.column, args=args)
+
+    # --- Phase 2: Bowl, Medley, Sort, Squeeze ---
+
+    def parse_bowl_def(self) -> BowlDef:
+        tok = self.expect(TokenType.BOWL)
+        name = self.expect(TokenType.IDENTIFIER, "Expected bowl name after 'bowl'").value
+        self.expect(TokenType.LBRACE, "Expected '{' after bowl name")
+        fields = []
+        while self.peek() != TokenType.RBRACE and not self.at_end():
+            field_name = self.expect(TokenType.IDENTIFIER, "Expected field name").value
+            type_ann = None
+            if self.match(TokenType.COLON):
+                type_ann = self.parse_type_name()
+            fields.append((field_name, type_ann))
+            if not self.match(TokenType.COMMA):
+                break
+        self.expect(TokenType.RBRACE, "Expected '}' after bowl fields")
+        return BowlDef(line=tok.line, column=tok.column, name=name, fields=fields)
+
+    def parse_medley_def(self) -> MedleyDef:
+        tok = self.expect(TokenType.MEDLEY)
+        name = self.expect(TokenType.IDENTIFIER, "Expected medley name after 'medley'").value
+        self.expect(TokenType.LBRACE, "Expected '{' after medley name")
+        variants = []
+        while self.peek() != TokenType.RBRACE and not self.at_end():
+            var_name = self.expect(TokenType.IDENTIFIER, "Expected variant name").value
+            var_fields = None
+            if self.match(TokenType.LPAREN):
+                var_fields = []
+                if self.peek() != TokenType.RPAREN:
+                    fname = self.expect(TokenType.IDENTIFIER, "Expected field name").value
+                    ftype = None
+                    if self.match(TokenType.COLON):
+                        ftype = self.parse_type_name()
+                    var_fields.append((fname, ftype))
+                    while self.match(TokenType.COMMA):
+                        fname = self.expect(TokenType.IDENTIFIER, "Expected field name").value
+                        ftype = None
+                        if self.match(TokenType.COLON):
+                            ftype = self.parse_type_name()
+                        var_fields.append((fname, ftype))
+                self.expect(TokenType.RPAREN, "Expected ')' after variant fields")
+            variants.append((var_name, var_fields))
+            if not self.match(TokenType.COMMA):
+                break
+        self.expect(TokenType.RBRACE, "Expected '}' after medley variants")
+        return MedleyDef(line=tok.line, column=tok.column, name=name, variants=variants)
+
+    def parse_sort_expr(self) -> SortExpr:
+        tok = self.advance()  # consume 'sort'
+        subject = self.parse_expression()
+        self.expect(TokenType.LBRACE, "Expected '{' after sort expression")
+        arms = []
+        while self.peek() != TokenType.RBRACE and not self.at_end():
+            pattern = self.parse_sort_pattern()
+            guard = None
+            # Check for 'where' guard (identifier with value "where")
+            if (self.peek() == TokenType.IDENTIFIER and
+                    self.current().value == "where"):
+                self.advance()  # consume 'where'
+                guard = self.parse_expression()
+            self.expect(TokenType.FAT_ARROW, "Expected '=>' after pattern")
+            # Body: either a block or an expression
+            if self.peek() == TokenType.LBRACE:
+                body = self.parse_block()
+            else:
+                body = self.parse_expression()
+            arms.append((pattern, guard, body))
+            # Optional comma between arms
+            self.match(TokenType.COMMA)
+        self.expect(TokenType.RBRACE, "Expected '}' after sort arms")
+        return SortExpr(line=tok.line, column=tok.column, subject=subject, arms=arms)
+
+    def parse_sort_pattern(self):
+        """Parse a pattern for sort arms.
+        Patterns: literal, _, identifier, MedleyName.Variant(bindings)
+        Returns a tuple describing the pattern.
+        """
+        tok = self.current()
+
+        # Wildcard
+        if tok.type == TokenType.IDENTIFIER and tok.value == "_":
+            self.advance()
+            return ("wildcard",)
+
+        # Number literal (including negative)
+        if tok.type == TokenType.MINUS:
+            self.advance()
+            num_tok = self.current()
+            if num_tok.type in (TokenType.INTEGER, TokenType.FLOAT):
+                self.advance()
+                return ("literal", -num_tok.value)
+
+        if tok.type in (TokenType.INTEGER, TokenType.FLOAT):
+            self.advance()
+            return ("literal", tok.value)
+
+        if tok.type == TokenType.STRING:
+            self.advance()
+            return ("literal", tok.value)
+
+        if tok.type == TokenType.TRUE:
+            self.advance()
+            return ("literal", True)
+
+        if tok.type == TokenType.FALSE:
+            self.advance()
+            return ("literal", False)
+
+        # Identifier: could be a binding, or MedleyName.Variant
+        if tok.type == TokenType.IDENTIFIER:
+            name = tok.value
+            self.advance()
+            # Check for dot access: MedleyName.Variant
+            if self.match(TokenType.DOT):
+                variant_name = self.expect(TokenType.IDENTIFIER, "Expected variant name after '.'").value
+                bindings = []
+                if self.match(TokenType.LPAREN):
+                    if self.peek() != TokenType.RPAREN:
+                        bindings.append(self.expect(TokenType.IDENTIFIER, "Expected binding name").value)
+                        while self.match(TokenType.COMMA):
+                            bindings.append(self.expect(TokenType.IDENTIFIER, "Expected binding name").value)
+                    self.expect(TokenType.RPAREN, "Expected ')' after variant bindings")
+                return ("variant", name, variant_name, bindings)
+            # Plain identifier = binding
+            return ("binding", name)
+
+        raise self.error(f"Unexpected token in sort pattern: {tok.type.name}")
+
+    def parse_squeeze(self) -> SqueezeLiteral:
+        """Parse a squeeze (lambda): |params| { body } or |params| expr"""
+        tok = self.expect(TokenType.PIPE)
+        params = []
+        if self.peek() != TokenType.PIPE:
+            name = self.expect(TokenType.IDENTIFIER, "Expected parameter name").value
+            type_ann = None
+            if self.match(TokenType.COLON):
+                type_ann = self.parse_type_name()
+            params.append((name, type_ann))
+            while self.match(TokenType.COMMA):
+                name = self.expect(TokenType.IDENTIFIER, "Expected parameter name").value
+                type_ann = None
+                if self.match(TokenType.COLON):
+                    type_ann = self.parse_type_name()
+                params.append((name, type_ann))
+        self.expect(TokenType.PIPE, "Expected '|' after squeeze parameters")
+        # Body: block or expression
+        if self.peek() == TokenType.LBRACE:
+            body = self.parse_block()
+        else:
+            body = self.parse_expression()
+        return SqueezeLiteral(line=tok.line, column=tok.column, params=params, body=body)
+
+    def _is_bowl_literal(self) -> bool:
+        """Lookahead: after seeing IDENTIFIER {, check if it's Name { field: ... }
+        Returns True if this looks like a bowl literal, False for a block."""
+        # We're positioned right after the identifier. Check if next is {
+        if self.peek() != TokenType.LBRACE:
+            return False
+        # Lookahead: { IDENTIFIER : ... } => bowl literal
+        if self.peek_at(1) == TokenType.IDENTIFIER and self.peek_at(2) == TokenType.COLON:
+            return True
+        # Empty bowl: { } could be a block, so we don't treat it as bowl
+        return False
+
+    def _parse_bowl_literal(self, name_tok: 'Token') -> BowlLiteral:
+        """Parse bowl literal after the name identifier has been consumed.
+        We're at the opening {."""
+        self.expect(TokenType.LBRACE)
+        field_values = []
+        while self.peek() != TokenType.RBRACE and not self.at_end():
+            fname = self.expect(TokenType.IDENTIFIER, "Expected field name").value
+            self.expect(TokenType.COLON, "Expected ':' after field name in bowl literal")
+            fvalue = self.parse_expression()
+            field_values.append((fname, fvalue))
+            if not self.match(TokenType.COMMA):
+                break
+        self.expect(TokenType.RBRACE, "Expected '}' after bowl literal")
+        return BowlLiteral(
+            line=name_tok.line, column=name_tok.column,
+            name=name_tok.value, field_values=field_values,
+        )
 
     # --- Expression parsing with precedence ---
 
@@ -395,6 +588,9 @@ class Parser:
             return BoolLiteral(line=tok.line, column=tok.column, value=False)
 
         if self.match(TokenType.IDENTIFIER):
+            # Check for bowl literal: Name { field: value, ... }
+            if self._is_bowl_literal():
+                return self._parse_bowl_literal(tok)
             return Identifier(line=tok.line, column=tok.column, name=tok.value)
 
         # String interpolation
@@ -414,6 +610,14 @@ class Parser:
         # If expression in expression position
         if self.peek() == TokenType.IF:
             return self.parse_if()
+
+        # Sort expression
+        if self.peek() == TokenType.SORT:
+            return self.parse_sort_expr()
+
+        # Squeeze (lambda): |params| body
+        if self.peek() == TokenType.PIPE:
+            return self.parse_squeeze()
 
         raise self.error(f"Unexpected token {tok.type.name} ({tok.value!r})")
 
