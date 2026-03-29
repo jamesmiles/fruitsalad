@@ -75,6 +75,12 @@ blend is_keyword(word) {
     if word == "read_file" || word == "read_stdin" || word == "args" {
         yield true
     }
+    if word == "bowl" || word == "medley" || word == "sort" {
+        yield true
+    }
+    if word == "ripe" || word == "rot" || word == "pit" || word == "toss" {
+        yield true
+    }
     false
 }
 
@@ -277,7 +283,7 @@ blend tokenize(source) {
         -- two-char operators
         if pos + 1 < slen {
             fresh two = c + source[pos + 1]
-            if two == "==" || two == "!=" || two == "<=" || two == ">=" || two == "&&" || two == "||" || two == ".." || two == "->" || two == "~>" {
+            if two == "==" || two == "!=" || two == "<=" || two == ">=" || two == "&&" || two == "||" || two == ".." || two == "->" || two == "~>" || two == "=>" {
                 tokens.push(mk_tok("OP", two, line))
                 pos = pos + 2
                 skip
@@ -390,6 +396,10 @@ blend parse(tokens) {
         preserve tok = parser_peek(tokens, pos_ref)
         if tok[0] == "KW" && tok[1] == "blend" {
             functions.push(parse_blend_def(tokens, pos_ref))
+        } else if tok[0] == "KW" && tok[1] == "bowl" {
+            stmts.push(parse_bowl_def(tokens, pos_ref))
+        } else if tok[0] == "KW" && tok[1] == "medley" {
+            stmts.push(parse_medley_def(tokens, pos_ref))
         } else {
             stmts.push(parse_statement(tokens, pos_ref))
         }
@@ -514,6 +524,15 @@ blend parse_statement(tokens, pos_ref) {
         yield ["Display", args]
     }
 
+    if tok[0] == "KW" && tok[1] == "sort" {
+        yield parse_sort_expr(tokens, pos_ref)
+    }
+    if tok[0] == "KW" && tok[1] == "toss" {
+        parser_advance(tokens, pos_ref)
+        preserve toss_val = parse_expression(tokens, pos_ref)
+        yield ["Toss", toss_val]
+    }
+
     -- expression or assignment
     preserve expr = parse_expression(tokens, pos_ref)
     preserve next = parser_peek(tokens, pos_ref)
@@ -578,6 +597,175 @@ blend parse_loop(tokens, pos_ref) {
     parser_expect(tokens, pos_ref, "KW", "loop")
     preserve body = parse_block(tokens, pos_ref)
     yield ["Loop", body]
+}
+
+-- ============================================================
+-- BOWL / MEDLEY / SORT PARSERS
+-- ============================================================
+
+blend parse_bowl_def(tokens, pos_ref) {
+    parser_expect(tokens, pos_ref, "KW", "bowl")
+    preserve name = parser_advance(tokens, pos_ref)[1]
+    preserve lb = from_char_code(123)
+    parser_expect(tokens, pos_ref, "DELIM", lb)
+    fresh fields = []
+    loop {
+        preserve peek = parser_peek(tokens, pos_ref)
+        if peek[0] == "DELIM" && peek[1] == from_char_code(125) { snap }
+        preserve fname = parser_advance(tokens, pos_ref)[1]
+        fresh ftype = ""
+        if parser_match_delim(tokens, pos_ref, ":") {
+            ftype = parser_advance(tokens, pos_ref)[1]
+        }
+        fields.push([fname, ftype])
+        parser_match_delim(tokens, pos_ref, ",")
+    }
+    parser_expect(tokens, pos_ref, "DELIM", from_char_code(125))
+    yield ["BowlDef", name, fields]
+}
+
+blend parse_medley_def(tokens, pos_ref) {
+    parser_expect(tokens, pos_ref, "KW", "medley")
+    preserve name = parser_advance(tokens, pos_ref)[1]
+    preserve lb = from_char_code(123)
+    parser_expect(tokens, pos_ref, "DELIM", lb)
+    fresh variants = []
+    loop {
+        preserve peek = parser_peek(tokens, pos_ref)
+        if peek[0] == "DELIM" && peek[1] == from_char_code(125) { snap }
+        preserve vname = parser_advance(tokens, pos_ref)[1]
+        fresh vfields = []
+        if parser_match_delim(tokens, pos_ref, "(") {
+            preserve peek2 = parser_peek(tokens, pos_ref)
+            if !(peek2[0] == "DELIM" && peek2[1] == ")") {
+                preserve f1 = parser_advance(tokens, pos_ref)[1]
+                if parser_match_delim(tokens, pos_ref, ":") {
+                    parser_advance(tokens, pos_ref)
+                }
+                vfields.push(f1)
+                loop {
+                    if !parser_match_delim(tokens, pos_ref, ",") { snap }
+                    preserve fn2 = parser_advance(tokens, pos_ref)[1]
+                    if parser_match_delim(tokens, pos_ref, ":") {
+                        parser_advance(tokens, pos_ref)
+                    }
+                    vfields.push(fn2)
+                }
+            }
+            parser_expect(tokens, pos_ref, "DELIM", ")")
+        }
+        variants.push([vname, vfields])
+        parser_match_delim(tokens, pos_ref, ",")
+    }
+    parser_expect(tokens, pos_ref, "DELIM", from_char_code(125))
+    yield ["MedleyDef", name, variants]
+}
+
+blend parse_sort_expr(tokens, pos_ref) {
+    parser_expect(tokens, pos_ref, "KW", "sort")
+    preserve subject = parse_expression(tokens, pos_ref)
+    preserve lb = from_char_code(123)
+    parser_expect(tokens, pos_ref, "DELIM", lb)
+    fresh arms = []
+    loop {
+        preserve peek = parser_peek(tokens, pos_ref)
+        if peek[0] == "DELIM" && peek[1] == from_char_code(125) { snap }
+        preserve pattern = parse_sort_pattern(tokens, pos_ref)
+        parser_expect(tokens, pos_ref, "OP", "=>")
+        fresh body = []
+        preserve peek2 = parser_peek(tokens, pos_ref)
+        if peek2[0] == "DELIM" && peek2[1] == lb {
+            body = parse_block(tokens, pos_ref)
+        } else {
+            body = ["Block", [parse_expression(tokens, pos_ref)]]
+        }
+        arms.push([pattern, body])
+        parser_match_delim(tokens, pos_ref, ",")
+    }
+    parser_expect(tokens, pos_ref, "DELIM", from_char_code(125))
+    yield ["Sort", subject, arms]
+}
+
+blend parse_sort_pattern(tokens, pos_ref) {
+    preserve tok = parser_peek(tokens, pos_ref)
+    -- Wildcard _
+    if tok[0] == "ID" && tok[1] == "_" {
+        parser_advance(tokens, pos_ref)
+        yield ["PatWild"]
+    }
+    -- Number literal
+    if tok[0] == "NUM" {
+        parser_advance(tokens, pos_ref)
+        yield ["PatLit", tok[1]]
+    }
+    -- String literal
+    if tok[0] == "STR" {
+        parser_advance(tokens, pos_ref)
+        yield ["PatLit", tok[1]]
+    }
+    -- Boolean
+    if tok[0] == "KW" && tok[1] == "true" {
+        parser_advance(tokens, pos_ref)
+        yield ["PatLit", true]
+    }
+    if tok[0] == "KW" && tok[1] == "false" {
+        parser_advance(tokens, pos_ref)
+        yield ["PatLit", false]
+    }
+    -- ripe(binding) / rot(binding) / pit
+    if tok[0] == "KW" && tok[1] == "ripe" {
+        parser_advance(tokens, pos_ref)
+        fresh bindings = []
+        if parser_match_delim(tokens, pos_ref, "(") {
+            preserve b = parser_advance(tokens, pos_ref)[1]
+            bindings.push(b)
+            parser_expect(tokens, pos_ref, "DELIM", ")")
+        }
+        yield ["PatVariant", "Ripe", "ripe", bindings]
+    }
+    if tok[0] == "KW" && tok[1] == "rot" {
+        parser_advance(tokens, pos_ref)
+        fresh bindings = []
+        if parser_match_delim(tokens, pos_ref, "(") {
+            preserve b = parser_advance(tokens, pos_ref)[1]
+            bindings.push(b)
+            parser_expect(tokens, pos_ref, "DELIM", ")")
+        }
+        yield ["PatVariant", "Harvest", "rot", bindings]
+    }
+    if tok[0] == "KW" && tok[1] == "pit" {
+        parser_advance(tokens, pos_ref)
+        yield ["PatVariant", "Ripe", "pit", []]
+    }
+    -- Identifier: binding or MedleyName.Variant(bindings)
+    if tok[0] == "ID" || tok[0] == "KW" {
+        preserve name = parser_advance(tokens, pos_ref)[1]
+        if parser_match_delim(tokens, pos_ref, ".") {
+            preserve vname = parser_advance(tokens, pos_ref)[1]
+            fresh bindings = []
+            if parser_match_delim(tokens, pos_ref, "(") {
+                preserve peek3 = parser_peek(tokens, pos_ref)
+                if !(peek3[0] == "DELIM" && peek3[1] == ")") {
+                    bindings.push(parser_advance(tokens, pos_ref)[1])
+                    loop {
+                        if !parser_match_delim(tokens, pos_ref, ",") { snap }
+                        bindings.push(parser_advance(tokens, pos_ref)[1])
+                    }
+                }
+                parser_expect(tokens, pos_ref, "DELIM", ")")
+            }
+            yield ["PatVariant", name, vname, bindings]
+        }
+        yield ["PatBind", name]
+    }
+    -- Negative number
+    if tok[0] == "OP" && tok[1] == "-" {
+        parser_advance(tokens, pos_ref)
+        preserve num = parser_advance(tokens, pos_ref)
+        yield ["PatLit", 0 - num[1]]
+    }
+    parser_advance(tokens, pos_ref)
+    yield ["PatWild"]
 }
 
 -- ============================================================
@@ -742,7 +930,8 @@ blend parse_postfix(tokens, pos_ref) {
         -- field access: .name or .method(args)
         if tok[0] == "DELIM" && tok[1] == "." {
             parser_advance(tokens, pos_ref)
-            preserve field_tok = parser_expect(tokens, pos_ref, "ID", "")
+            -- Accept both ID and KW for field/variant names
+            preserve field_tok = parser_advance(tokens, pos_ref)
             preserve next2 = parser_peek(tokens, pos_ref)
             if next2[0] == "DELIM" && next2[1] == "(" {
                 -- method call
@@ -772,6 +961,37 @@ blend parse_postfix(tokens, pos_ref) {
             parser_expect(tokens, pos_ref, "DELIM", "]")
             expr = ["Index", expr, idx]
             skip
+        }
+        -- bowl literal: Name { field: value, ... }
+        preserve lb = from_char_code(123)
+        if tok[0] == "DELIM" && tok[1] == lb && expr[0] == "Ident" {
+            -- Lookahead: is this really a bowl literal (ID : pattern)?
+            preserve saved_pos = pos_ref[0]
+            parser_advance(tokens, pos_ref)
+            preserve peek_b = parser_peek(tokens, pos_ref)
+            preserve peek_b2_pos = pos_ref[0] + 1
+            fresh is_bowl = false
+            if (peek_b[0] == "ID" || peek_b[0] == "KW") && peek_b2_pos < tokens.len() && tokens[peek_b2_pos][0] == "DELIM" && tokens[peek_b2_pos][1] == ":" {
+                is_bowl = true
+            }
+            if is_bowl {
+                fresh fields = []
+                loop {
+                    preserve fp = parser_peek(tokens, pos_ref)
+                    if fp[0] == "DELIM" && fp[1] == from_char_code(125) { snap }
+                    preserve fname = parser_advance(tokens, pos_ref)[1]
+                    parser_expect(tokens, pos_ref, "DELIM", ":")
+                    preserve fval = parse_expression(tokens, pos_ref)
+                    fields.push([fname, fval])
+                    parser_match_delim(tokens, pos_ref, ",")
+                }
+                parser_expect(tokens, pos_ref, "DELIM", from_char_code(125))
+                expr = ["BowlLit", expr[1], fields]
+                skip
+            } else {
+                -- Not a bowl literal, restore position
+                pos_ref[0] = saved_pos
+            }
         }
         -- function call: (args)
         if tok[0] == "DELIM" && tok[1] == "(" {
@@ -874,13 +1094,47 @@ blend parse_primary(tokens, pos_ref) {
         yield ["Closure", params, body]
     }
 
+    -- sort expression
+    if tok[0] == "KW" && tok[1] == "sort" {
+        yield parse_sort_expr(tokens, pos_ref)
+    }
+
+    -- if expression
+    if tok[0] == "KW" && tok[1] == "if" {
+        yield parse_if(tokens, pos_ref)
+    }
+
+    -- ripe(value)
+    if tok[0] == "KW" && tok[1] == "ripe" {
+        parser_advance(tokens, pos_ref)
+        parser_expect(tokens, pos_ref, "DELIM", "(")
+        preserve val = parse_expression(tokens, pos_ref)
+        parser_expect(tokens, pos_ref, "DELIM", ")")
+        yield ["Ripe", val]
+    }
+
+    -- rot(message)
+    if tok[0] == "KW" && tok[1] == "rot" {
+        parser_advance(tokens, pos_ref)
+        parser_expect(tokens, pos_ref, "DELIM", "(")
+        preserve val = parse_expression(tokens, pos_ref)
+        parser_expect(tokens, pos_ref, "DELIM", ")")
+        yield ["Rot", val]
+    }
+
+    -- pit
+    if tok[0] == "KW" && tok[1] == "pit" {
+        parser_advance(tokens, pos_ref)
+        yield ["Pit"]
+    }
+
     -- identifier (or builtin-as-identifier like display used as expression)
     if tok[0] == "ID" {
         parser_advance(tokens, pos_ref)
         yield ["Ident", tok[1]]
     }
 
-    -- builtins used as expressions (keywords that act like function names)
+    -- builtins/keywords used as identifiers in expression position
     if tok[0] == "KW" {
         if tok[1] == "display" || tok[1] == "peel" || tok[1] == "abs" ||
            tok[1] == "min" || tok[1] == "max" || tok[1] == "to_apple" ||
@@ -944,6 +1198,9 @@ blend safe_name(name) {
     if name == "pass" { yield "pass_" }
     if name == "with" { yield "with_" }
     if name == "type" { yield "type_" }
+    if name == "None" { yield "None_" }
+    if name == "True" { yield "True_" }
+    if name == "False" { yield "False_" }
     name
 }
 
@@ -989,6 +1246,18 @@ blend generate(node, level) {
     if typ == "Display" {
         yield gen_display(node, level)
     }
+    if typ == "BowlDef" {
+        yield gen_bowl_def(node, level)
+    }
+    if typ == "MedleyDef" {
+        yield gen_medley_def(node, level)
+    }
+    if typ == "Sort" {
+        yield gen_sort(node, level)
+    }
+    if typ == "Toss" {
+        yield make_indent(level) + "raise Exception(_fs_fmt(" + gen_expr(node[1]) + "))"
+    }
     -- expression statement
     yield make_indent(level) + gen_expr(node)
 }
@@ -1001,6 +1270,8 @@ blend gen_program(node, level) {
     result = result + "def _fs_fmt(v):\n"
     result = result + "    if isinstance(v, bool): return 'true' if v else 'false'\n"
     result = result + "    if isinstance(v, list): return '[' + ', '.join(_fs_fmt(x) for x in v) + ']'\n"
+    result = result + "    if isinstance(v, _FsVariant): return repr(v)\n"
+    result = result + "    if isinstance(v, _FsBowl): return repr(v)\n"
     result = result + "    if v is None: return 'pit'\n"
     result = result + "    if isinstance(v, float): return f'" + from_char_code(123) + "v:.10g" + from_char_code(125) + "'\n"
     result = result + "    return str(v)\n"
@@ -1008,7 +1279,23 @@ blend gen_program(node, level) {
     result = result + "_fs_type_map = " + from_char_code(123) + "'int':'Apple','float':'Date','str':'Banana','bool':'Cherry','list':'Basket','NoneType':'Pit'" + from_char_code(125) + "\n"
     result = result + "def _fs_peel(v): return _fs_type_map.get(type(v).__name__, type(v).__name__)\n"
     result = result + "def char_code(c): return ord(c)\n"
-    result = result + "def from_char_code(n): return chr(n)\n\n"
+    result = result + "def from_char_code(n): return chr(n)\n"
+    -- Bowl: simple class with named fields
+    result = result + "class _FsBowl:\n"
+    result = result + "    def __init__(self, _name, **fields):\n"
+    result = result + "        self._name = _name\n"
+    result = result + "        self.__dict__.update(fields)\n"
+    result = result + "    def __repr__(self):\n"
+    result = result + "        fields = ', '.join(f'" + from_char_code(123) + "k" + from_char_code(125) + ": " + from_char_code(123) + "_fs_fmt(v)" + from_char_code(125) + "' for k, v in self.__dict__.items() if k != '_name')\n"
+    result = result + "        return f'" + from_char_code(123) + "self._name" + from_char_code(125) + " " + from_char_code(123) + from_char_code(123) + " " + from_char_code(123) + "fields" + from_char_code(125) + " " + from_char_code(125) + from_char_code(125) + "'\n"
+    -- Medley: tagged tuple
+    result = result + "class _FsVariant:\n"
+    result = result + "    def __init__(self, medley, variant, *args):\n"
+    result = result + "        self.medley = medley; self.variant = variant; self.values = list(args)\n"
+    result = result + "    def __repr__(self):\n"
+    result = result + "        if self.values: return f'" + from_char_code(123) + "self.medley" + from_char_code(125) + "." + from_char_code(123) + "self.variant" + from_char_code(125) + "(" + from_char_code(123) + "', '.join(_fs_fmt(v) for v in self.values)" + from_char_code(125) + ")'\n"
+    result = result + "        return f'" + from_char_code(123) + "self.medley" + from_char_code(125) + "." + from_char_code(123) + "self.variant" + from_char_code(125) + "'\n"
+    result = result + "    def __eq__(self, other): return isinstance(other, _FsVariant) and self.medley == other.medley and self.variant == other.variant and self.values == other.values\n\n"
 
     preserve funcs = node[1]
     preserve stmts = node[2]
@@ -1070,7 +1357,8 @@ blend is_expression_node(node) {
     if typ == "BinOp" || typ == "UnaryOp" || typ == "Call" || typ == "MethodCall" ||
        typ == "Ident" || typ == "NumLit" || typ == "FloatLit" || typ == "StrLit" ||
        typ == "BoolLit" || typ == "BasketLit" || typ == "Index" || typ == "Field" ||
-       typ == "StrInterp" || typ == "Closure" || typ == "InterpStr" {
+       typ == "StrInterp" || typ == "Closure" || typ == "InterpStr" ||
+       typ == "Ripe" || typ == "Rot" || typ == "Pit" || typ == "BowlLit" {
         yield true
     }
     false
@@ -1114,6 +1402,69 @@ blend gen_with_return(node, level) {
                 }
                 code = code + gen_with_return(else_stmts[else_stmts.len() - 1], level + 1) + "\n"
             }
+        }
+        yield code
+    }
+    if typ == "Sort" {
+        -- Generate sort with return in each arm
+        preserve subject = node[1]
+        preserve arms = node[2]
+        preserve subj_var = "_sort_subj"
+        fresh code = make_indent(level) + subj_var + " = " + gen_expr(subject) + "\n"
+        fresh first_arm = true
+        each i in 0..arms.len() {
+            preserve pattern = arms[i][0]
+            preserve body = arms[i][1]
+            preserve pat_type = pattern[0]
+            if pat_type == "PatWild" || pat_type == "PatBind" {
+                if first_arm {
+                    code = code + make_indent(level) + "if True:\n"
+                } else {
+                    code = code + make_indent(level) + "else:\n"
+                }
+                if pat_type == "PatBind" {
+                    code = code + make_indent(level + 1) + safe_name(pattern[1]) + " = " + subj_var + "\n"
+                }
+                preserve stmts = body[1]
+                if stmts.len() > 0 {
+                    each j in 0..(stmts.len() - 1) {
+                        code = code + generate(stmts[j], level + 1) + "\n"
+                    }
+                    code = code + gen_with_return(stmts[stmts.len() - 1], level + 1) + "\n"
+                } else {
+                    code = code + make_indent(level + 1) + "pass\n"
+                }
+            } else if pat_type == "PatLit" {
+                fresh kw = "elif "
+                if first_arm { kw = "if " }
+                code = code + make_indent(level) + kw + subj_var + " == " + gen_sort_lit(pattern[1]) + ":\n"
+                preserve stmts = body[1]
+                if stmts.len() > 0 {
+                    each j in 0..(stmts.len() - 1) {
+                        code = code + generate(stmts[j], level + 1) + "\n"
+                    }
+                    code = code + gen_with_return(stmts[stmts.len() - 1], level + 1) + "\n"
+                } else {
+                    code = code + make_indent(level + 1) + "pass\n"
+                }
+            } else if pat_type == "PatVariant" {
+                fresh kw = "elif "
+                if first_arm { kw = "if " }
+                code = code + make_indent(level) + kw + "isinstance(" + subj_var + ", _FsVariant) and " + subj_var + ".variant == \"" + pattern[2] + "\":\n"
+                each j in 0..pattern[3].len() {
+                    code = code + make_indent(level + 1) + safe_name(pattern[3][j]) + " = " + subj_var + ".values[" + to_banana(j) + "]\n"
+                }
+                preserve stmts = body[1]
+                if stmts.len() > 0 {
+                    each j in 0..(stmts.len() - 1) {
+                        code = code + generate(stmts[j], level + 1) + "\n"
+                    }
+                    code = code + gen_with_return(stmts[stmts.len() - 1], level + 1) + "\n"
+                } else if pattern[3].len() == 0 {
+                    code = code + make_indent(level + 1) + "pass\n"
+                }
+            }
+            first_arm = false
         }
         yield code
     }
@@ -1275,6 +1626,112 @@ blend gen_display(node, level) {
     make_indent(level) + "_fs_display(" + arg_strs + ")"
 }
 
+blend gen_bowl_def(node, level) {
+    -- Bowl becomes a factory function: def BowlName(**kw): return _FsBowl("Name", **kw)
+    preserve name = node[1]
+    make_indent(level) + "def " + name + "(**kw): return _FsBowl(\"" + name + "\", **kw)"
+}
+
+blend gen_medley_def(node, level) {
+    -- Medley becomes a namespace class with variant constructors
+    preserve name = node[1]
+    preserve variants = node[2]
+    fresh result = make_indent(level) + "class " + name + ":\n"
+    each i in 0..variants.len() {
+        preserve vname = variants[i][0]
+        preserve safe_vname = safe_name(vname)
+        preserve vfields = variants[i][1]
+        if vfields.len() == 0 {
+            result = result + make_indent(level + 1) + safe_vname + " = _FsVariant(\"" + name + "\", \"" + vname + "\")\n"
+        } else {
+            fresh pstr = ""
+            each j in 0..vfields.len() {
+                if j > 0 { pstr = pstr + ", " }
+                pstr = pstr + safe_name(vfields[j])
+            }
+            result = result + make_indent(level + 1) + "@staticmethod\n"
+            result = result + make_indent(level + 1) + "def " + safe_vname + "(" + pstr + "): return _FsVariant(\"" + name + "\", \"" + vname + "\", " + pstr + ")\n"
+        }
+    }
+    result
+}
+
+blend gen_sort(node, level) {
+    -- Sort becomes a chain of if/elif checking patterns
+    preserve subject = node[1]
+    preserve arms = node[2]
+    preserve subj_var = "_sort_subj"
+    fresh result = make_indent(level) + subj_var + " = " + gen_expr(subject) + "\n"
+
+    fresh first = true
+    each i in 0..arms.len() {
+        preserve pattern = arms[i][0]
+        preserve body = arms[i][1]
+        preserve pat_type = pattern[0]
+
+        if pat_type == "PatWild" {
+            if first {
+                result = result + make_indent(level) + "if True:\n"
+            } else {
+                result = result + make_indent(level) + "else:\n"
+            }
+            result = result + gen_sort_body(body, level + 1)
+        } else if pat_type == "PatLit" {
+            fresh kw = "elif "
+            if first { kw = "if " }
+            result = result + make_indent(level) + kw + subj_var + " == " + gen_sort_lit(pattern[1]) + ":\n"
+            result = result + gen_sort_body(body, level + 1)
+        } else if pat_type == "PatBind" {
+            preserve bind_name = safe_name(pattern[1])
+            if first {
+                result = result + make_indent(level) + bind_name + " = " + subj_var + "\n"
+                result = result + make_indent(level) + "if True:\n"
+            } else {
+                result = result + make_indent(level) + "else:\n"
+                result = result + make_indent(level + 1) + bind_name + " = " + subj_var + "\n"
+            }
+            result = result + gen_sort_body(body, level + 1)
+        } else if pat_type == "PatVariant" {
+            preserve med_name = pattern[1]
+            preserve var_name = pattern[2]
+            preserve bindings = pattern[3]
+            fresh kw = "elif "
+            if first { kw = "if " }
+            result = result + make_indent(level) + kw + "isinstance(" + subj_var + ", _FsVariant) and " + subj_var + ".variant == \"" + var_name + "\":\n"
+            -- Bind captured values
+            each j in 0..bindings.len() {
+                result = result + make_indent(level + 1) + safe_name(bindings[j]) + " = " + subj_var + ".values[" + to_banana(j) + "]\n"
+            }
+            result = result + gen_sort_body(body, level + 1)
+        }
+        first = false
+    }
+    result
+}
+
+blend gen_sort_lit(val) {
+    if peel(val) == "Banana" {
+        yield "\"" + val + "\""
+    }
+    if peel(val) == "Cherry" {
+        if val { yield "True" }
+        yield "False"
+    }
+    to_banana(val)
+}
+
+blend gen_sort_body(body, level) {
+    preserve stmts = body[1]
+    fresh result = ""
+    if stmts.len() == 0 {
+        yield make_indent(level) + "pass\n"
+    }
+    each i in 0..stmts.len() {
+        result = result + generate(stmts[i], level) + "\n"
+    }
+    result
+}
+
 -- ============================================================
 -- EXPRESSION CODE GENERATOR
 -- ============================================================
@@ -1317,7 +1774,7 @@ blend gen_expr(node) {
         yield gen_expr(node[1]) + "[" + gen_expr(node[2]) + "]"
     }
     if typ == "Field" {
-        yield gen_expr(node[1]) + "." + node[2]
+        yield gen_expr(node[1]) + "." + safe_name(node[2])
     }
     if typ == "BasketLit" {
         yield gen_basket_lit(node)
@@ -1333,6 +1790,25 @@ blend gen_expr(node) {
     }
     if typ == "Closure" {
         yield gen_closure(node)
+    }
+    if typ == "BowlLit" {
+        -- BowlLit: ["BowlLit", "Name", [[fname, value_expr], ...]]
+        preserve bname = node[1]
+        fresh kw_args = ""
+        each i in 0..node[2].len() {
+            if i > 0 { kw_args = kw_args + ", " }
+            kw_args = kw_args + node[2][i][0] + "=" + gen_expr(node[2][i][1])
+        }
+        yield bname + "(" + kw_args + ")"
+    }
+    if typ == "Ripe" {
+        yield "_FsVariant(\"Ripe\", \"ripe\", " + gen_expr(node[1]) + ")"
+    }
+    if typ == "Rot" {
+        yield "_FsVariant(\"Harvest\", \"rot\", " + gen_expr(node[1]) + ")"
+    }
+    if typ == "Pit" {
+        yield "_FsVariant(\"Ripe\", \"pit\")"
     }
     -- fallback
     "None"
