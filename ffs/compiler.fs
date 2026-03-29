@@ -954,13 +954,35 @@ blend gen_blend_def(node, level) {
     }
 
     fresh result = make_indent(level) + "def " + name + "(" + param_str + "):\n"
-    preserve body_code = gen_block_stmts(body, level + 1)
-    if body_code == "" {
+    preserve stmts = body[1]
+    if stmts.len() == 0 {
         result = result + make_indent(level + 1) + "pass"
-    } else {
-        result = result + body_code
+        yield result
+    }
+    -- Generate all statements, adding 'return' before the last one
+    -- if it's a bare expression (not a control flow or assignment)
+    each i in 0..stmts.len() {
+        preserve stmt = stmts[i]
+        preserve is_last = (i == stmts.len() - 1)
+        if is_last && is_expression_node(stmt) {
+            result = result + make_indent(level + 1) + "return " + gen_expr(stmt) + "\n"
+        } else {
+            result = result + generate(stmt, level + 1) + "\n"
+        }
     }
     result
+}
+
+blend is_expression_node(node) {
+    preserve typ = node[0]
+    -- These are expression types (not statements/control flow)
+    if typ == "BinOp" || typ == "UnaryOp" || typ == "Call" || typ == "MethodCall" ||
+       typ == "Ident" || typ == "NumLit" || typ == "FloatLit" || typ == "StrLit" ||
+       typ == "BoolLit" || typ == "BasketLit" || typ == "Index" || typ == "Field" ||
+       typ == "StrInterp" {
+        yield true
+    }
+    false
 }
 
 blend gen_block_stmts(node, level) {
@@ -1369,26 +1391,13 @@ blend gen_interp_str(segments) {
 -- MAIN: compile a test program
 -- ============================================================
 
-blend main() {
-    -- Build test source without using { in strings (triggers interpolation)
-    preserve lb = from_char_code(123)  -- {
-    preserve rb = from_char_code(125)  -- }
-    preserve nl = from_char_code(10)   -- newline
-    preserve qt = from_char_code(34)   -- "
-
-    -- Build: blend main() { display("Hello from ffs!") }
-    preserve source = "blend main() " + lb + nl + "    display(" + qt + "Hello from ffs!" + qt + ")" + nl + rb
-
-    preserve tokens = tokenize(source)
-    preserve ast = parse(tokens)
-    preserve python_code = generate(ast, 0)
-
-    -- trim trailing whitespace/newlines and remove blank lines
+blend trim_output(code) {
+    -- Remove trailing blank lines, keep structure
     fresh output = ""
-    preserve lines = python_code.split("\n")
+    preserve lines = code.split("\n")
     fresh first = true
     each i in 0..lines.len() {
-        if lines[i].trim().len() > 0 {
+        if lines[i].trim().len() > 0 || !first {
             if !first {
                 output = output + "\n"
             }
@@ -1396,5 +1405,45 @@ blend main() {
             first = false
         }
     }
-    display(output)
+    -- Remove trailing newlines
+    while output.len() > 0 && output[output.len() - 1] == "\n" {
+        fresh new_out = ""
+        each i in 0..(output.len() - 1) {
+            new_out = new_out + output[i]
+        }
+        output = new_out
+    }
+    output
+}
+
+blend compile(source) {
+    preserve tokens = tokenize(source)
+    preserve ast = parse(tokens)
+    generate(ast, 0)
+}
+
+blend main() {
+    preserve lb = from_char_code(123)  -- {
+    preserve rb = from_char_code(125)  -- }
+    preserve nl = from_char_code(10)   -- newline
+    preserve qt = from_char_code(34)   -- "
+
+    -- Build a factorial program in Fruit Salad:
+    -- blend factorial(n) {
+    --     if n <= 1 { yield 1 }
+    --     n * factorial(n - 1)
+    -- }
+    -- blend main() { display(factorial(10)) }
+    fresh source = "blend factorial(n) " + lb + nl
+    source = source + "    if n <= 1 " + lb + nl
+    source = source + "        yield 1" + nl
+    source = source + "    " + rb + nl
+    source = source + "    n * factorial(n - 1)" + nl
+    source = source + rb + nl + nl
+    source = source + "blend main() " + lb + nl
+    source = source + "    display(factorial(10))" + nl
+    source = source + rb
+
+    preserve python_code = compile(source)
+    display(trim_output(python_code))
 }
