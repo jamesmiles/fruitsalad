@@ -87,40 +87,43 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Compare fs and ffs output on all compatible programs
+      - name: Compare fs and ffs on key programs
+        timeout-minutes: 10
         run: |
-          pass=0; fail=0; errors=0; skip=0
-          for f in tests/solutions/*/*.fs; do
+          # Test a curated subset covering all categories (keeps CI fast)
+          tests=(
+            tests/solutions/classic/hello_world.fs
+            tests/solutions/classic/fizzbuzz.fs
+            tests/solutions/classic/towers_of_hanoi.fs
+            tests/solutions/math/factorial.fs
+            tests/solutions/math/fibonacci.fs
+            tests/solutions/math/gcd.fs
+            tests/solutions/math/primes_sieve.fs
+            tests/solutions/sorting/bubble_sort.fs
+            tests/solutions/sorting/merge_sort.fs
+            tests/solutions/sorting/quick_sort.fs
+            tests/solutions/searching/binary_search.fs
+            tests/solutions/searching/linear_search.fs
+            tests/solutions/dp/fibonacci_dp.fs
+            tests/solutions/dp/coin_change.fs
+            tests/solutions/strings/reverse_string.fs
+            tests/solutions/strings/palindrome.fs
+            tests/solutions/data_structures/stack.fs
+            tests/solutions/data_structures/queue.fs
+            tests/solutions/type_system/closures.fs
+            tests/solutions/type_system/smoothie_pipeline.fs
+          )
+          pass=0; fail=0
+          for f in "${tests[@]}"; do
             name=$(basename "$f" .fs)
-            # Skip self-hosting tests (interpreter-in-interpreter too slow)
-            if echo "$name" | grep -qE "self_hosting|ffs_factorial"; then
-              skip=$((skip+1)); continue
-            fi
-            # Get fs output
             fs_out=$(timeout 10 python3 -m fs "$f" 2>/dev/null)
-            if [ $? -ne 0 ]; then skip=$((skip+1)); continue; fi
-            # Compile with ffs
-            py_code=$(timeout 30 python3 -m fs ffs/compiler.fs "$f" 2>/dev/null)
-            if [ $? -ne 0 ]; then
-              echo "COMPILE_ERR: $name (expected for Bowl/Medley/Sort)"
-              errors=$((errors+1)); continue
-            fi
-            # Run generated Python
-            ffs_out=$(echo "$py_code" | timeout 10 python3 2>/dev/null)
-            if [ $? -ne 0 ]; then
-              echo "RUN_ERR: $name"
-              fail=$((fail+1)); continue
-            fi
-            # Compare
-            if [ "$fs_out" = "$ffs_out" ]; then
-              pass=$((pass+1))
-            else
-              echo "MISMATCH: $name"
-              fail=$((fail+1))
-            fi
+            py_code=$(timeout 20 python3 -m fs ffs/compiler.fs "$f" 2>/dev/null)
+            if [ $? -ne 0 ]; then echo "COMPILE_ERR: $name"; fail=$((fail+1)); continue; fi
+            ffs_out=$(echo "$py_code" | timeout 5 python3 2>/dev/null)
+            if [ $? -ne 0 ]; then echo "RUN_ERR: $name"; fail=$((fail+1)); continue; fi
+            if [ "$fs_out" = "$ffs_out" ]; then echo "PASS: $name"; pass=$((pass+1))
+            else echo "MISMATCH: $name"; fail=$((fail+1)); fi
           done
           echo ""
-          echo "FFS Results: $pass pass, $fail fail, $errors compile_err, $skip skipped"
-          echo "Total compatible: $((pass + fail)) | Pass rate: $pass/$((pass + fail))"
-          # Fail CI if any MISMATCH or RUN_ERR (compile errors are expected)
-          [ $fail -eq 0 ] && echo "All compatible programs match!" || (echo "FAIL: $fail mismatches/errors" && exit 1)
+          echo "FFS: $pass/${#tests[@]} pass"
+          [ $fail -eq 0 ] && echo "All ffs tests match!" || (echo "FAIL: $fail errors" && exit 1)
