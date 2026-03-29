@@ -29,6 +29,13 @@ KEYWORDS = {
     "bowl": TokenType.BOWL,
     "medley": TokenType.MEDLEY,
     "sort": TokenType.SORT,
+    "ripe": TokenType.RIPE,
+    "pit": TokenType.PIT,
+    "rot": TokenType.ROT,
+    "toss": TokenType.TOSS,
+    "recipe": TokenType.RECIPE,
+    "prep": TokenType.PREP,
+    "as": TokenType.AS,
 }
 
 
@@ -299,6 +306,10 @@ class Lexer:
             if self.match("|"):
                 return Token(TokenType.OR_OR, "||", start_line, start_col)
             return Token(TokenType.PIPE, "|", start_line, start_col)
+
+        if ch == "?":
+            self.advance()
+            return Token(TokenType.QUESTION, "?", start_line, start_col)
 
         if ch == ".":
             self.advance()

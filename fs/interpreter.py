@@ -9,6 +9,8 @@ from .ast_nodes import (
     Identifier, StringInterpolation, DisplayExpr, ASTNode,
     BowlDef, BowlLiteral, MedleyDef, MedleyVariantExpr, SortExpr,
     SqueezeLiteral, PantryLiteral,
+    SmoothieExpr, JuiceOrRotExpr, TossStmt, RecipeDef, PrepDef,
+    PitLiteral, RipeExpr, RotExpr,
 )
 from .errors import SplatError, RotError
 
@@ -27,6 +29,12 @@ class SkipSignal(Exception):
 
 class YieldSignal(Exception):
     """Raised by yield (return)."""
+    def __init__(self, value):
+        self.value = value
+
+
+class TossSignal(Exception):
+    """Raised by toss (throw) or ? operator propagation."""
     def __init__(self, value):
         self.value = value
 
@@ -138,6 +146,8 @@ class Interpreter:
     def __init__(self, output_fn=None):
         self.globals = Environment()
         self.output_fn = output_fn or print  # for capturing output in tests
+        self.recipes = {}  # recipe_name -> RecipeDef
+        self.preps = {}    # (type_name, recipe_name) -> {method_name: FSFunction}
 
     def run(self, program: Program):
         # First pass: register all functions
@@ -437,6 +447,28 @@ class Interpreter:
                     return ("__method_remove__", obj)
                 if field == "slice":
                     return ("__method_slice__", obj)
+                if field == "map":
+                    return ("__method_map__", obj)
+                if field == "filter":
+                    return ("__method_filter__", obj)
+                if field == "reduce":
+                    return ("__method_reduce__", obj)
+                if field == "each":
+                    return ("__method_each__", obj)
+                if field == "any":
+                    return ("__method_any__", obj)
+                if field == "all":
+                    return ("__method_all__", obj)
+                if field == "find":
+                    return ("__method_find__", obj)
+
+        # Check for recipe methods on bowl instances
+        if isinstance(obj, FSBowlInstance):
+            type_name = obj.bowl_type.name
+            # Search all preps for this type
+            for (tn, rn), methods in self.preps.items():
+                if tn == type_name and field in methods:
+                    return ("__prep_method__", obj, methods[field])
 
         raise SplatError(f"No field '{field}' on {self._type_name(obj)}", node.line, node.column)
 
@@ -554,6 +586,220 @@ class Interpreter:
             entries[key] = val
         return entries
 
+    # --- Phase 3: Smoothie, Ripe/Rot/Pit, JuiceOrRot, Toss, Recipe, Prep ---
+
+    def _exec_SmoothieExpr(self, node: SmoothieExpr, env: Environment):
+        left_val = self._exec(node.left, env)
+        right = node.right
+
+        # If right is a CallExpr with an Identifier callee, try as method first, then function
+        if isinstance(right, CallExpr):
+            extra_args = [self._exec(a, env) for a in right.args]
+            callee_node = right.callee
+
+            # Try to resolve the callee: if it's an Identifier, check if it's
+            # a method on left_val or a function in the environment
+            if isinstance(callee_node, Identifier):
+                name = callee_node.name
+                # First try: look up as a method on the left value
+                method = self._try_get_method(left_val, name)
+                if method is not None:
+                    return self._call_value(method, extra_args, node.line, node.column)
+                # Second try: look up in environment and prepend left as first arg
+                try:
+                    callee = env.get(name, callee_node.line, callee_node.column)
+                    return self._call_value(callee, [left_val] + extra_args, node.line, node.column)
+                except SplatError:
+                    raise SplatError(f"Undefined function or method '{name}'", node.line, node.column)
+            else:
+                # General callee expression - evaluate and prepend left
+                callee = self._exec(callee_node, env)
+                return self._call_value(callee, [left_val] + extra_args, node.line, node.column)
+
+        # If right is a FieldExpr (e.g., obj.method), evaluate it
+        # and call with left as sole argument
+        if isinstance(right, FieldExpr):
+            callee = self._exec(right, env)
+            return self._call_value(callee, [left_val], node.line, node.column)
+
+        # If right is an Identifier, try as method first, then function with left as arg
+        if isinstance(right, Identifier):
+            name = right.name
+            method = self._try_get_method(left_val, name)
+            if method is not None:
+                return self._call_value(method, [], node.line, node.column)
+            try:
+                callee = env.get(name, right.line, right.column)
+                return self._call_value(callee, [left_val], node.line, node.column)
+            except SplatError:
+                raise SplatError(f"Undefined function or method '{name}'", node.line, node.column)
+
+        raise SplatError("Right side of ~> must be a function or call expression", node.line, node.column)
+
+    def _try_get_method(self, obj, method_name):
+        """Try to get a bound method tuple for obj.method_name, or return None."""
+        if isinstance(obj, (list, str)):
+            method_map = {
+                "len": "__method_len__",
+                "push": "__method_push__",
+                "pop": "__method_pop__",
+                "swap": "__method_swap__",
+                "copy": "__method_copy__",
+                "contains": "__method_contains__",
+                "remove": "__method_remove__",
+                "slice": "__method_slice__",
+                "map": "__method_map__",
+                "filter": "__method_filter__",
+                "reduce": "__method_reduce__",
+                "each": "__method_each__",
+                "any": "__method_any__",
+                "all": "__method_all__",
+                "find": "__method_find__",
+            }
+            if isinstance(obj, list) and method_name in method_map:
+                return (method_map[method_name], obj)
+            if isinstance(obj, str) and method_name == "len":
+                return ("__method_len__", obj)
+        if isinstance(obj, FSBowlInstance):
+            type_name = obj.bowl_type.name
+            for (tn, rn), methods in self.preps.items():
+                if tn == type_name and method_name in methods:
+                    return ("__prep_method__", obj, methods[method_name])
+        return None
+
+    def _call_value(self, callee, args, line, col):
+        """Call a callable value with given args."""
+        if isinstance(callee, FSFunction):
+            return self._call_function(callee, args, line, col)
+        if isinstance(callee, FSClosure):
+            return self._call_closure(callee, args, line, col)
+        # Handle bound methods (2-tuple)
+        if isinstance(callee, tuple) and len(callee) == 2 and isinstance(callee[0], str):
+            return self._call_method_tuple(callee, args, line, col)
+        # Handle prep method tuples (3-tuple)
+        if isinstance(callee, tuple) and len(callee) == 3 and callee[0] == "__prep_method__":
+            _, obj, method_fn = callee
+            return self._call_function(method_fn, [obj] + args, line, col)
+        # Handle variant constructors
+        if hasattr(callee, 'medley_name') and hasattr(callee, 'variant_name') and hasattr(callee, 'expected_count'):
+            if len(args) != callee.expected_count:
+                raise SplatError(
+                    f"Variant '{callee.medley_name}.{callee.variant_name}' expects {callee.expected_count} argument(s), got {len(args)}",
+                    line, col,
+                )
+            return FSMedleyVariant(callee.medley_name, callee.variant_name, args)
+        raise SplatError(f"Cannot call {self._type_name(callee)} value", line, col)
+
+    def _call_method_tuple(self, callee, args, line, col):
+        """Handle calling bound method tuples from _call_value."""
+        method_name, obj = callee
+        # Reuse the same logic as in _exec_CallExpr
+        if method_name == "__method_len__":
+            return len(obj)
+        if method_name == "__method_push__":
+            if len(args) != 1:
+                raise SplatError("push() takes exactly 1 argument", line, col)
+            obj.append(args[0])
+            return None
+        if method_name == "__method_pop__":
+            if len(obj) == 0:
+                raise SplatError("Cannot pop from empty Basket", line, col)
+            return obj.pop()
+        if method_name == "__method_copy__":
+            return list(obj)
+        if method_name == "__method_contains__":
+            if len(args) != 1:
+                raise SplatError("contains() takes exactly 1 argument", line, col)
+            return args[0] in obj
+        if method_name == "__method_swap__":
+            if len(args) != 2:
+                raise SplatError("swap() takes exactly 2 arguments", line, col)
+            i, j = args
+            obj[i], obj[j] = obj[j], obj[i]
+            return None
+        if method_name == "__method_remove__":
+            if len(args) != 1:
+                raise SplatError("remove() takes exactly 1 argument", line, col)
+            return obj.pop(args[0])
+        if method_name == "__method_slice__":
+            if len(args) != 2:
+                raise SplatError("slice() takes exactly 2 arguments", line, col)
+            return obj[args[0]:args[1]]
+        # Higher-order methods
+        if method_name == "__method_map__":
+            if len(args) != 1:
+                raise SplatError("map() takes exactly 1 argument", line, col)
+            return [self._call_value(args[0], [item], line, col) for item in obj]
+        if method_name == "__method_filter__":
+            if len(args) != 1:
+                raise SplatError("filter() takes exactly 1 argument", line, col)
+            return [item for item in obj if self._truthy(self._call_value(args[0], [item], line, col))]
+        if method_name == "__method_reduce__":
+            if len(args) != 2:
+                raise SplatError("reduce() takes exactly 2 arguments", line, col)
+            closure, acc = args
+            for item in obj:
+                acc = self._call_value(closure, [acc, item], line, col)
+            return acc
+        if method_name == "__method_each__":
+            if len(args) != 1:
+                raise SplatError("each() takes exactly 1 argument", line, col)
+            for item in obj:
+                self._call_value(args[0], [item], line, col)
+            return None
+        if method_name == "__method_any__":
+            if len(args) != 1:
+                raise SplatError("any() takes exactly 1 argument", line, col)
+            return any(self._truthy(self._call_value(args[0], [item], line, col)) for item in obj)
+        if method_name == "__method_all__":
+            if len(args) != 1:
+                raise SplatError("all() takes exactly 1 argument", line, col)
+            return all(self._truthy(self._call_value(args[0], [item], line, col)) for item in obj)
+        if method_name == "__method_find__":
+            if len(args) != 1:
+                raise SplatError("find() takes exactly 1 argument", line, col)
+            for item in obj:
+                if self._truthy(self._call_value(args[0], [item], line, col)):
+                    return FSMedleyVariant("Ripe", "ripe", [item])
+            return FSMedleyVariant("Ripe", "pit", [])
+        raise SplatError(f"Unknown method {method_name}", line, col)
+
+    def _exec_PitLiteral(self, node: PitLiteral, env: Environment):
+        return FSMedleyVariant("Ripe", "pit", [])
+
+    def _exec_RipeExpr(self, node: RipeExpr, env: Environment):
+        value = self._exec(node.value, env)
+        return FSMedleyVariant("Ripe", "ripe", [value])
+
+    def _exec_RotExpr(self, node: RotExpr, env: Environment):
+        value = self._exec(node.value, env)
+        return FSMedleyVariant("Harvest", "rot", [value])
+
+    def _exec_JuiceOrRotExpr(self, node: JuiceOrRotExpr, env: Environment):
+        value = self._exec(node.expr, env)
+        if isinstance(value, FSMedleyVariant):
+            if value.variant_name == "ripe" and value.values:
+                return value.values[0]
+            if value.variant_name == "pit" or value.variant_name == "rot":
+                raise TossSignal(value)
+        raise SplatError("? operator requires a Ripe or Harvest value", node.line, node.column)
+
+    def _exec_TossStmt(self, node: TossStmt, env: Environment):
+        value = self._exec(node.value, env)
+        raise TossSignal(value)
+
+    def _exec_RecipeDef(self, node: RecipeDef, env: Environment):
+        self.recipes[node.name] = node
+        return None
+
+    def _exec_PrepDef(self, node: PrepDef, env: Environment):
+        key = (node.type_name, node.recipe_name)
+        methods = {}
+        for method_def in node.methods:
+            methods[method_def.name] = FSFunction(method_def, env)
+        self.preps[key] = methods
+        return None
+
     # --- Function calls ---
 
     def _call_function(self, fn: FSFunction, args: list, line: int, col: int) -> object:
@@ -650,6 +896,67 @@ class Interpreter:
                 if not isinstance(start, int) or not isinstance(end, int):
                     raise RotError("slice() arguments must be Apple (integer)", node.line, node.column)
                 return obj[start:end]
+
+            # Higher-order basket methods
+            if method_name == "__method_map__":
+                if len(args) != 1:
+                    raise SplatError("map() takes exactly 1 argument (a squeeze)", node.line, node.column)
+                closure = args[0]
+                return [self._call_value(closure, [item], node.line, node.column) for item in obj]
+
+            if method_name == "__method_filter__":
+                if len(args) != 1:
+                    raise SplatError("filter() takes exactly 1 argument (a squeeze)", node.line, node.column)
+                closure = args[0]
+                return [item for item in obj if self._truthy(self._call_value(closure, [item], node.line, node.column))]
+
+            if method_name == "__method_reduce__":
+                if len(args) != 2:
+                    raise SplatError("reduce() takes exactly 2 arguments (a squeeze and initial value)", node.line, node.column)
+                closure, acc = args
+                for item in obj:
+                    acc = self._call_value(closure, [acc, item], node.line, node.column)
+                return acc
+
+            if method_name == "__method_each__":
+                if len(args) != 1:
+                    raise SplatError("each() takes exactly 1 argument (a squeeze)", node.line, node.column)
+                closure = args[0]
+                for item in obj:
+                    self._call_value(closure, [item], node.line, node.column)
+                return None
+
+            if method_name == "__method_any__":
+                if len(args) != 1:
+                    raise SplatError("any() takes exactly 1 argument (a squeeze)", node.line, node.column)
+                closure = args[0]
+                for item in obj:
+                    if self._truthy(self._call_value(closure, [item], node.line, node.column)):
+                        return True
+                return False
+
+            if method_name == "__method_all__":
+                if len(args) != 1:
+                    raise SplatError("all() takes exactly 1 argument (a squeeze)", node.line, node.column)
+                closure = args[0]
+                for item in obj:
+                    if not self._truthy(self._call_value(closure, [item], node.line, node.column)):
+                        return False
+                return True
+
+            if method_name == "__method_find__":
+                if len(args) != 1:
+                    raise SplatError("find() takes exactly 1 argument (a squeeze)", node.line, node.column)
+                closure = args[0]
+                for item in obj:
+                    if self._truthy(self._call_value(closure, [item], node.line, node.column)):
+                        return FSMedleyVariant("Ripe", "ripe", [item])
+                return FSMedleyVariant("Ripe", "pit", [])
+
+        # Handle prep method tuples (3-element)
+        if isinstance(callee, tuple) and len(callee) == 3 and callee[0] == "__prep_method__":
+            _, obj, method_fn = callee
+            return self._call_function(method_fn, [obj] + args, node.line, node.column)
 
         if isinstance(callee, FSFunction):
             return self._call_function(callee, args, node.line, node.column)

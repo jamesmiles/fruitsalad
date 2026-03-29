@@ -42,6 +42,15 @@ class TokenType(Enum):
     SORT = auto()       # pattern matching
     PANTRY = auto()     # hash map type
 
+    # Phase 3 keywords
+    RIPE = auto()       # Option some
+    PIT = auto()        # Option none (keyword constant)
+    ROT = auto()        # Result error constructor
+    TOSS = auto()       # throw/propagate error
+    RECIPE = auto()     # trait definition
+    PREP = auto()       # trait implementation
+    AS = auto()         # used in "prep X as Y"
+
     # Operators
     PLUS = auto()
     MINUS = auto()
@@ -75,6 +84,7 @@ class TokenType(Enum):
     DOT_DOT = auto()    # ..
     DOT_DOT_EQ = auto() # ..=
     DOT = auto()
+    QUESTION = auto()   # ? (juice_or_rot postfix operator)
 
     # String interpolation markers
     STRING_INTERP_START = auto()  # string segment before {

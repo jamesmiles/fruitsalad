@@ -10,6 +10,8 @@ from .ast_nodes import (
     Identifier, StringInterpolation, DisplayExpr,
     BowlDef, BowlLiteral, MedleyDef, MedleyVariantExpr, SortExpr,
     SqueezeLiteral, PantryLiteral,
+    SmoothieExpr, JuiceOrRotExpr, TossStmt, RecipeDef, PrepDef,
+    PitLiteral, RipeExpr, RotExpr,
 )
 from .errors import ParseError
 
@@ -85,6 +87,10 @@ class Parser:
                 prog.statements.append(self.parse_bowl_def())
             elif self.peek() == TokenType.MEDLEY:
                 prog.statements.append(self.parse_medley_def())
+            elif self.peek() == TokenType.RECIPE:
+                prog.statements.append(self.parse_recipe_def())
+            elif self.peek() == TokenType.PREP:
+                prog.statements.append(self.parse_prep_def())
             else:
                 prog.statements.append(self.parse_statement())
         return prog
@@ -164,6 +170,12 @@ class Parser:
             return self.parse_yield()
         if tt == TokenType.DISPLAY:
             return self.parse_display()
+        if tt == TokenType.TOSS:
+            return self.parse_toss()
+        if tt == TokenType.RECIPE:
+            return self.parse_recipe_def()
+        if tt == TokenType.PREP:
+            return self.parse_prep_def()
 
         # Expression statement (possibly assignment)
         expr = self.parse_expression()
@@ -369,6 +381,35 @@ class Parser:
             self.advance()
             return ("literal", False)
 
+        # ripe(binding) pattern
+        if tok.type == TokenType.RIPE:
+            self.advance()
+            bindings = []
+            if self.match(TokenType.LPAREN):
+                if self.peek() != TokenType.RPAREN:
+                    bindings.append(self.expect(TokenType.IDENTIFIER, "Expected binding name").value)
+                    while self.match(TokenType.COMMA):
+                        bindings.append(self.expect(TokenType.IDENTIFIER, "Expected binding name").value)
+                self.expect(TokenType.RPAREN, "Expected ')' after ripe bindings")
+            return ("variant", "Ripe", "ripe", bindings)
+
+        # rot(binding) pattern
+        if tok.type == TokenType.ROT:
+            self.advance()
+            bindings = []
+            if self.match(TokenType.LPAREN):
+                if self.peek() != TokenType.RPAREN:
+                    bindings.append(self.expect(TokenType.IDENTIFIER, "Expected binding name").value)
+                    while self.match(TokenType.COMMA):
+                        bindings.append(self.expect(TokenType.IDENTIFIER, "Expected binding name").value)
+                self.expect(TokenType.RPAREN, "Expected ')' after rot bindings")
+            return ("variant", "Harvest", "rot", bindings)
+
+        # pit pattern (Ripe.pit)
+        if tok.type == TokenType.PIT:
+            self.advance()
+            return ("variant", "Ripe", "pit", [])
+
         # Identifier: could be a binding, or MedleyName.Variant
         if tok.type == TokenType.IDENTIFIER:
             name = tok.value
@@ -412,6 +453,33 @@ class Parser:
         else:
             body = self.parse_expression()
         return SqueezeLiteral(line=tok.line, column=tok.column, params=params, body=body)
+
+    def parse_toss(self) -> TossStmt:
+        tok = self.advance()  # consume 'toss'
+        value = self.parse_expression()
+        return TossStmt(line=tok.line, column=tok.column, value=value)
+
+    def parse_recipe_def(self) -> RecipeDef:
+        tok = self.expect(TokenType.RECIPE)
+        name = self.expect(TokenType.IDENTIFIER, "Expected recipe name after 'recipe'").value
+        self.expect(TokenType.LBRACE, "Expected '{' after recipe name")
+        methods = []
+        while self.peek() != TokenType.RBRACE and not self.at_end():
+            methods.append(self.parse_blend_def())
+        self.expect(TokenType.RBRACE, "Expected '}' after recipe methods")
+        return RecipeDef(line=tok.line, column=tok.column, name=name, methods=methods)
+
+    def parse_prep_def(self) -> PrepDef:
+        tok = self.expect(TokenType.PREP)
+        type_name = self.expect(TokenType.IDENTIFIER, "Expected type name after 'prep'").value
+        self.expect(TokenType.AS, "Expected 'as' after type name in prep")
+        recipe_name = self.expect(TokenType.IDENTIFIER, "Expected recipe name after 'as'").value
+        self.expect(TokenType.LBRACE, "Expected '{' after recipe name in prep")
+        methods = []
+        while self.peek() != TokenType.RBRACE and not self.at_end():
+            methods.append(self.parse_blend_def())
+        self.expect(TokenType.RBRACE, "Expected '}' after prep methods")
+        return PrepDef(line=tok.line, column=tok.column, type_name=type_name, recipe_name=recipe_name, methods=methods)
 
     def _is_bowl_literal(self) -> bool:
         """Lookahead: after seeing IDENTIFIER {, check if it's Name { field: ... }
@@ -476,7 +544,7 @@ class Parser:
         return left
 
     def parse_comparison(self):
-        left = self.parse_range()
+        left = self.parse_pipeline()
         while True:
             if self.match(TokenType.LESS):
                 right = self.parse_range()
@@ -492,6 +560,14 @@ class Parser:
                 left = BinaryExpr(line=left.line, column=left.column, left=left, op=">=", right=right)
             else:
                 break
+        return left
+
+    def parse_pipeline(self):
+        left = self.parse_range()
+        while self.match(TokenType.SMOOTHIE):
+            # Right side: parse a postfix expression (could be call or identifier)
+            right = self.parse_postfix()
+            left = SmoothieExpr(line=left.line, column=left.column, left=left, right=right)
         return left
 
     def parse_range(self):
@@ -565,6 +641,9 @@ class Parser:
                 # Field/method access
                 field_name = self.expect(TokenType.IDENTIFIER, "Expected field name after '.'").value
                 expr = FieldExpr(line=expr.line, column=expr.column, object=expr, field=field_name)
+            elif self.match(TokenType.QUESTION):
+                # Juice-or-rot postfix operator
+                expr = JuiceOrRotExpr(line=expr.line, column=expr.column, expr=expr)
             else:
                 break
         return expr
@@ -615,9 +694,29 @@ class Parser:
         if self.peek() == TokenType.SORT:
             return self.parse_sort_expr()
 
+        # Display as expression
+        if self.peek() == TokenType.DISPLAY:
+            return self.parse_display()
+
         # Squeeze (lambda): |params| body
         if self.peek() == TokenType.PIPE:
             return self.parse_squeeze()
+
+        # Phase 3: pit, ripe, rot
+        if self.match(TokenType.PIT):
+            return PitLiteral(line=tok.line, column=tok.column)
+
+        if self.match(TokenType.RIPE):
+            self.expect(TokenType.LPAREN, "Expected '(' after 'ripe'")
+            value = self.parse_expression()
+            self.expect(TokenType.RPAREN, "Expected ')' after ripe value")
+            return RipeExpr(line=tok.line, column=tok.column, value=value)
+
+        if self.match(TokenType.ROT):
+            self.expect(TokenType.LPAREN, "Expected '(' after 'rot'")
+            value = self.parse_expression()
+            self.expect(TokenType.RPAREN, "Expected ')' after rot value")
+            return RotExpr(line=tok.line, column=tok.column, value=value)
 
         raise self.error(f"Unexpected token {tok.type.name} ({tok.value!r})")
 

@@ -234,3 +234,50 @@ class SqueezeLiteral(ASTNode):
 class PantryLiteral(ASTNode):
     """Pantry (map) literal: {key: value, key: value}"""
     entries: list = field(default_factory=list)  # list of (key_expr, value_expr)
+
+
+# --- Phase 3: Smoothie, Ripe/Rot, Recipe/Prep, JuiceOrRot ---
+
+@dataclass
+class SmoothieExpr(ASTNode):
+    """Pipeline operator: expr ~> func"""
+    left: ASTNode = None
+    right: ASTNode = None  # should be a callable expression
+
+@dataclass
+class JuiceOrRotExpr(ASTNode):
+    """Postfix ? operator: unwrap Ripe or propagate Rot/Pit."""
+    expr: ASTNode = None
+
+@dataclass
+class TossStmt(ASTNode):
+    """Toss (throw): toss expr"""
+    value: ASTNode = None
+
+@dataclass
+class RecipeDef(ASTNode):
+    """Recipe (trait) definition: recipe Name { blend method(self) -> Type }"""
+    name: str = ""
+    methods: list = field(default_factory=list)  # list of BlendDef (signatures only, body may be None)
+
+@dataclass
+class PrepDef(ASTNode):
+    """Prep (impl) block: prep TypeName as RecipeName { blend method(self) { ... } }"""
+    type_name: str = ""
+    recipe_name: str = ""
+    methods: list = field(default_factory=list)  # list of BlendDef
+
+@dataclass
+class PitLiteral(ASTNode):
+    """The pit constant (None/empty option)."""
+    pass
+
+@dataclass
+class RipeExpr(ASTNode):
+    """ripe(value) - wraps in Ripe."""
+    value: ASTNode = None
+
+@dataclass
+class RotExpr(ASTNode):
+    """rot(message) - creates Rot error value."""
+    value: ASTNode = None
