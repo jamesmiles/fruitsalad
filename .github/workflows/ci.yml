@@ -75,9 +75,35 @@ jobs:
           if-no-files-found: ignore
 
   ffs-compiler:
-    name: FFS Compiler Verification
+    name: "FFS: ${{ matrix.group }}"
     runs-on: self-hosted
     needs: test-local
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: classic
+            dirs: tests/solutions/classic
+          - group: math
+            dirs: tests/solutions/math
+          - group: sorting
+            dirs: tests/solutions/sorting
+          - group: searching
+            dirs: tests/solutions/searching
+          - group: dp
+            dirs: tests/solutions/dp
+          - group: strings
+            dirs: tests/solutions/strings
+          - group: data-structures
+            dirs: tests/solutions/data_structures
+          - group: graph
+            dirs: tests/solutions/graph
+          - group: type-system
+            dirs: tests/solutions/type_system
+          - group: other
+            dirs: tests/solutions/concurrency tests/solutions/error_handling
 
     steps:
       - uses: actions/checkout@v4
@@ -87,43 +113,5 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Compare fs and ffs on key programs
-        timeout-minutes: 10
-        run: |
-          # Test a curated subset covering all categories (keeps CI fast)
-          tests=(
-            tests/solutions/classic/hello_world.fs
-            tests/solutions/classic/fizzbuzz.fs
-            tests/solutions/classic/towers_of_hanoi.fs
-            tests/solutions/math/factorial.fs
-            tests/solutions/math/fibonacci.fs
-            tests/solutions/math/gcd.fs
-            tests/solutions/math/primes_sieve.fs
-            tests/solutions/sorting/bubble_sort.fs
-            tests/solutions/sorting/merge_sort.fs
-            tests/solutions/sorting/quick_sort.fs
-            tests/solutions/searching/binary_search.fs
-            tests/solutions/searching/linear_search.fs
-            tests/solutions/dp/fibonacci_dp.fs
-            tests/solutions/dp/coin_change.fs
-            tests/solutions/strings/reverse_string.fs
-            tests/solutions/strings/palindrome.fs
-            tests/solutions/data_structures/stack.fs
-            tests/solutions/data_structures/queue.fs
-            tests/solutions/type_system/closures.fs
-            tests/solutions/type_system/smoothie_pipeline.fs
-          )
-          pass=0; fail=0
-          for f in "${tests[@]}"; do
-            name=$(basename "$f" .fs)
-            fs_out=$(timeout 10 python3 -m fs "$f" 2>/dev/null)
-            py_code=$(timeout 20 python3 -m fs ffs/compiler.fs "$f" 2>/dev/null)
-            if [ $? -ne 0 ]; then echo "COMPILE_ERR: $name"; fail=$((fail+1)); continue; fi
-            ffs_out=$(echo "$py_code" | timeout 5 python3 2>/dev/null)
-            if [ $? -ne 0 ]; then echo "RUN_ERR: $name"; fail=$((fail+1)); continue; fi
-            if [ "$fs_out" = "$ffs_out" ]; then echo "PASS: $name"; pass=$((pass+1))
-            else echo "MISMATCH: $name"; fail=$((fail+1)); fi
-          done
-          echo ""
-          echo "FFS: $pass/${#tests[@]} pass"
-          [ $fail -eq 0 ] && echo "All ffs tests match!" || (echo "FAIL: $fail errors" && exit 1)
+      - name: "FFS compare: ${{ matrix.group }}"
+        run: bash tests/ffs_compare.sh ${{ matrix.dirs }}
