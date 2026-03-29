@@ -63,6 +63,18 @@ blend is_keyword(word) {
     if word == "candied" {
         yield true
     }
+    if word == "peel" || word == "abs" || word == "min" || word == "max" {
+        yield true
+    }
+    if word == "to_apple" || word == "to_date" || word == "to_banana" {
+        yield true
+    }
+    if word == "char_code" || word == "from_char_code" || word == "sqrt" {
+        yield true
+    }
+    if word == "read_file" || word == "read_stdin" || word == "args" {
+        yield true
+    }
     false
 }
 
@@ -203,12 +215,19 @@ blend tokenize(source) {
             skip
         }
 
-        -- number
+        -- number (integer or float)
         if is_digit(c) {
             fresh num_str = ""
+            fresh has_dot = false
             loop {
                 if pos >= slen {
                     snap
+                }
+                if source[pos] == "." && !has_dot && pos + 1 < slen && is_digit(source[pos + 1]) {
+                    has_dot = true
+                    num_str = num_str + source[pos]
+                    pos = pos + 1
+                    skip
                 }
                 if !is_digit(source[pos]) {
                     snap
@@ -216,7 +235,11 @@ blend tokenize(source) {
                 num_str = num_str + source[pos]
                 pos = pos + 1
             }
-            tokens.push(mk_tok("NUM", to_apple(num_str), line))
+            if has_dot {
+                tokens.push(mk_tok("NUM", num_str, line))
+            } else {
+                tokens.push(mk_tok("NUM", to_apple(num_str), line))
+            }
             skip
         }
 
@@ -828,10 +851,16 @@ blend parse_primary(tokens, pos_ref) {
         yield ["Ident", tok[1]]
     }
 
-    -- builtins used as expressions
-    if tok[0] == "KW" && tok[1] == "display" {
-        parser_advance(tokens, pos_ref)
-        yield ["Ident", "display"]
+    -- builtins used as expressions (keywords that act like function names)
+    if tok[0] == "KW" {
+        if tok[1] == "display" || tok[1] == "peel" || tok[1] == "abs" ||
+           tok[1] == "min" || tok[1] == "max" || tok[1] == "to_apple" ||
+           tok[1] == "to_date" || tok[1] == "to_banana" || tok[1] == "char_code" ||
+           tok[1] == "from_char_code" || tok[1] == "sqrt" || tok[1] == "read_file" ||
+           tok[1] == "read_stdin" || tok[1] == "args" {
+            parser_advance(tokens, pos_ref)
+            yield ["Ident", tok[1]]
+        }
     }
 
     display("Parse error: unexpected token " + tok[0] + " '" + to_banana(tok[1]) + "' at line " + to_banana(tok[2]))
@@ -871,6 +900,22 @@ blend py_escape_str(s) {
         i = i + 1
     }
     result
+}
+
+blend safe_name(name) {
+    -- Rename Python reserved words
+    if name == "from" { yield "from_" }
+    if name == "in" { yield "in_" }
+    if name == "is" { yield "is_" }
+    if name == "as" { yield "as_" }
+    if name == "class" { yield "class_" }
+    if name == "def" { yield "def_" }
+    if name == "import" { yield "import_" }
+    if name == "lambda" { yield "lambda_" }
+    if name == "pass" { yield "pass_" }
+    if name == "with" { yield "with_" }
+    if name == "type" { yield "type_" }
+    name
 }
 
 blend generate(node, level) {
@@ -928,8 +973,11 @@ blend gen_program(node, level) {
     result = result + "    if isinstance(v, bool): return 'true' if v else 'false'\n"
     result = result + "    if isinstance(v, list): return '[' + ', '.join(_fs_fmt(x) for x in v) + ']'\n"
     result = result + "    if v is None: return 'pit'\n"
+    result = result + "    if isinstance(v, float): return f'" + from_char_code(123) + "v:.10g" + from_char_code(125) + "'\n"
     result = result + "    return str(v)\n"
-    result = result + "def _fs_display(*args): print(' '.join(_fs_fmt(a) for a in args))\n\n"
+    result = result + "def _fs_display(*args): print(' '.join(_fs_fmt(a) for a in args))\n"
+    result = result + "_fs_type_map = " + from_char_code(123) + "'int':'Apple','float':'Date','str':'Banana','bool':'Cherry','list':'Basket','NoneType':'Pit'" + from_char_code(125) + "\n"
+    result = result + "def _fs_peel(v): return _fs_type_map.get(type(v).__name__, type(v).__name__)\n\n"
 
     preserve funcs = node[1]
     preserve stmts = node[2]
@@ -964,7 +1012,7 @@ blend gen_blend_def(node, level) {
         if i > 0 {
             param_str = param_str + ", "
         }
-        param_str = param_str + params[i]
+        param_str = param_str + safe_name(params[i])
     }
 
     fresh result = make_indent(level) + "def " + name + "(" + param_str + "):\n"
@@ -1050,7 +1098,7 @@ blend gen_block(node, level) {
 }
 
 blend gen_var_def(node, level) {
-    preserve name = node[2]
+    preserve name = safe_name(node[2])
     preserve value = node[3]
     make_indent(level) + name + " = " + gen_expr(value)
 }
@@ -1059,7 +1107,7 @@ blend gen_assign(node, level) {
     preserve target = node[1]
     preserve value = node[2]
     if target[0] == "Ident" {
-        yield make_indent(level) + target[1] + " = " + gen_expr(value)
+        yield make_indent(level) + safe_name(target[1]) + " = " + gen_expr(value)
     }
     if target[0] == "Index" {
         yield make_indent(level) + gen_expr(target[1]) + "[" + gen_expr(target[2]) + "] = " + gen_expr(value)
@@ -1139,7 +1187,7 @@ blend gen_while(node, level) {
 }
 
 blend gen_each(node, level) {
-    preserve var_name = node[1]
+    preserve var_name = safe_name(node[1])
     preserve iter_expr = node[2]
     preserve body = node[3]
 
@@ -1213,7 +1261,7 @@ blend gen_expr(node) {
         }
     }
     if typ == "Ident" {
-        yield node[1]
+        yield safe_name(node[1])
     }
     if typ == "BinOp" {
         yield gen_binop(node)
@@ -1300,6 +1348,18 @@ blend gen_call(node) {
     }
     if func_name == "to_apple" {
         yield "int(" + gen_expr(args[0]) + ")"
+    }
+    if func_name == "to_date" {
+        yield "float(" + gen_expr(args[0]) + ")"
+    }
+    if func_name == "peel" {
+        yield "_fs_peel(" + gen_expr(args[0]) + ")"
+    }
+    if func_name == "read_file" {
+        yield "open(" + gen_expr(args[0]) + ").read()"
+    }
+    if func_name == "sqrt" {
+        yield "__import__('math').sqrt(" + gen_expr(args[0]) + ")"
     }
     if func_name == "char_code" {
         yield "ord(" + gen_expr(args[0]) + ")"
@@ -1412,7 +1472,7 @@ blend gen_closure(node) {
             if i > 0 {
                 param_str = param_str + ", "
             }
-            param_str = param_str + params[i]
+            param_str = param_str + safe_name(params[i])
         }
         preserve expr = stmts[0]
         yield "(lambda " + param_str + ": " + gen_expr(expr) + ")"
@@ -1424,7 +1484,7 @@ blend gen_closure(node) {
         if i > 0 {
             param_str = param_str + ", "
         }
-        param_str = param_str + params[i]
+        param_str = param_str + safe_name(params[i])
     }
     "(lambda " + param_str + ": None)"
 }
